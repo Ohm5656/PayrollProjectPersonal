@@ -63,9 +63,14 @@ def perform(pid,action):
         if overflow is None:
             raise RuntimeError('Windows notification-area overflow was not found; no icon input sent')
         from pywinauto import Desktop
-        candidates=[button_node for button_node in Desktop(backend='uia').window(handle=overflow).descendants()
-                    if button_node.element_info.control_type=='Button'
-                    and button_node.element_info.name.startswith('NTP Payroll Assistant')]
+        candidates=[]
+        for _ in range(4):
+            candidates=[button_node for button_node in Desktop(backend='uia').window(handle=overflow).descendants()
+                        if button_node.element_info.control_type=='Button'
+                        and button_node.element_info.name.startswith('NTP Payroll Assistant')]
+            if candidates:
+                break
+            time.sleep(.25)
         if len(candidates)!=1:
             raise RuntimeError(f'Expected exactly one labelled payroll tray button, found {len(candidates)}; no input sent')
         rect=candidates[0].rectangle()
@@ -81,18 +86,25 @@ def perform(pid,action):
         else:win32gui.ShowWindow(main['hwnd'],win32con.SW_MINIMIZE)
     elif action in ('click','double'):
         click_icon('left',double=action=='double')
-    elif action in ('open','exit'):
+    elif action in ('menu','open','exit'):
         click_icon('right')
         time.sleep(.25)
         menus=[r for r in windows(pid) if r['visible'] and r['hwnd'] not in (main['hwnd'],tray['hwnd'])]
         if not menus:raise RuntimeError('Native application context menu was not found; no input sent')
+        if action=='menu':
+            return {'pid':pid,'action':action,'before':rows,'menu':menus,'after':windows(pid),'foreground':win32gui.GetForegroundWindow()}
         popup=menus[0]['hwnd']
         if menus[0]['class']!='#32768':
-            key=win32con.VK_END if action=='exit' else win32con.VK_HOME
-            # This is a real user-equivalent keystroke after the real tray
-            # button activated the QMenu.  QMenu receives it as foreground.
-            win32api.keybd_event(key,0,0,0); win32api.keybd_event(key,0,win32con.KEYEVENTF_KEYUP,0)
-            win32api.keybd_event(win32con.VK_RETURN,0,0,0); win32api.keybd_event(win32con.VK_RETURN,0,win32con.KEYEVENTF_KEYUP,0)
+            left,top,right,bottom=menus[0]['rect']
+            # The tray right-click is physical.  Deliver a standard mouse
+            # click to the native Qt menu's client area, never to a QAction
+            # or application method.  Client coordinates avoid Windows 11's
+            # notification-area DPI virtualisation.
+            x=(right-left)//2
+            y=(bottom-top-18) if action=='exit' else 18
+            lparam=(y << 16) | x
+            for message in (win32con.WM_MOUSEMOVE,win32con.WM_LBUTTONDOWN,win32con.WM_LBUTTONUP):
+                win32gui.SendMessage(popup,message,0,lparam)
             time.sleep(.5)
             return {'pid':pid,'action':action,'before':rows,'menu':menus,'after':windows(pid),'foreground':win32gui.GetForegroundWindow()}
         menu=win32gui.SendMessage(popup,0x1E1,0,0)  # MN_GETHMENU
@@ -109,7 +121,7 @@ if __name__=='__main__':
     ctypes.windll.user32.SetProcessDPIAware()
     parser=argparse.ArgumentParser()
     parser.add_argument('--pid',type=int,required=True)
-    parser.add_argument('--action',choices=['state','close','minimize','click','double','open','exit'],default='state')
+    parser.add_argument('--action',choices=['state','close','minimize','click','double','menu','open','exit'],default='state')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
     result=perform(args.pid,args.action)
@@ -117,4 +129,4 @@ if __name__=='__main__':
         path=development_target(args.output)
         path.parent.mkdir(parents=True,exist_ok=True)
         path.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
-    print(json.dumps(result,ensure_ascii=False))
+    sys.stdout.buffer.write((json.dumps(result,ensure_ascii=False)+'\n').encode('utf-8'))

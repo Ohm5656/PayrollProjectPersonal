@@ -14,6 +14,11 @@ from app.services.history_service import import_history
 from app.services.payroll_service import PayrollService
 
 
+def should_show_main_window(*, startup, minimized, tray_available):
+    """Manual launches must be visible; explicit startup may be tray-only."""
+    return not (startup or minimized) or not tray_available
+
+
 def configure_logging():
     path = development_target(TEST_ROOT / 'app_state' / 'logs' / 'app.log')
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,7 +77,7 @@ def main():
         application.setQuitOnLastWindowClosed(not available)
         if available:
             tray.show()
-        if not (args.minimized or args.startup) or not available:
+        if should_show_main_window(startup=args.startup,minimized=args.minimized,tray_available=available):
             controller.show_main_window('manual_launch' if not args.smoke_test else 'smoke_test')
         application.aboutToQuit.connect(window.shutdown)
         if args.smoke_test:

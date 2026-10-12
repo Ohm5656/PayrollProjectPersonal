@@ -10,6 +10,11 @@ import threading
 from datetime import datetime,timezone
 from app.safety import TEST_ROOT
 
+# Process IDs can be reused, so an owned identity always contains both values.
+# A just-quit instance may remain in the system snapshot for a moment.  Do not
+# mistake that known test-owned instance for a user's pre-existing Excel.
+OWNED_EXCEL_IDENTITIES=set()
+
 
 def release_metadata(proxy):
     """Release dynamic ITypeInfo/ITypeComp while the owned server is alive.
@@ -151,7 +156,9 @@ class ExcelGateway:
         import pythoncom
         import win32com.client
         import win32process
-        self.pre_existing = excel_processes()
+        snapshot=excel_processes()
+        self.pre_existing={pid:created for pid,created in snapshot.items()
+                           if (pid,created) not in OWNED_EXCEL_IDENTITIES}
         # Balance exactly our own apartment initialization. pythoncom may have
         # auto-initialized the importing thread; its main-thread helper can skip
         # a nested initialization and then tear down somebody else's apartment.
@@ -182,6 +189,7 @@ class ExcelGateway:
             import win32api
             self._process_handle=win32api.OpenProcess(0x1000|0x100000,False,self.pid)
             self.creation_time=excel_processes()[self.pid]
+            OWNED_EXCEL_IDENTITIES.add((self.pid,self.creation_time))
             self.record('created')
             app.Visible = False
             app.DisplayAlerts = False

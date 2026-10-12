@@ -5,7 +5,8 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from decimal import Decimal
 
 import pytest
-from PySide6.QtWidgets import QApplication, QDialog, QTableWidget
+from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QApplication, QDialog, QTableWidget, QSystemTrayIcon
 
 from app.domain import ReviewIssue, issue_key
 from app.services.payroll_service import PayrollService
@@ -23,6 +24,17 @@ from tests.unit.test_draft_engine import draft_case, calculate
 def qt_app():
     app = QApplication.instance() or QApplication([])
     yield app
+    # Explicitly release native Qt/window/tray resources before Python's
+    # interpreter teardown.  This keeps the full COM + Qt suite from relying
+    # on non-deterministic finalizer order on Windows.
+    for tray in app.findChildren(QSystemTrayIcon):
+        tray.hide()
+        tray.setContextMenu(None)
+        tray.deleteLater()
+    for widget in app.topLevelWidgets():
+        widget.close()
+        widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     app.processEvents()
 
 
