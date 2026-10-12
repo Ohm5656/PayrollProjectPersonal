@@ -1,0 +1,11 @@
+__pycache__/
+.pytest_cache/
+.venv/
+test_workspace/**
+!test_workspace/.gitkeep
+reference_data/
+reports/
+test_workspace/
+logs/
+backups/
+data/*.db
