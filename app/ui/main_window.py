@@ -24,6 +24,8 @@ from app.ui.review_queue_model import ReviewQueueModel
 from app.ui.review_queue_page import ReviewQueuePage
 from app.ui.employee_detail_page import EmployeeDetailPage
 from app.ui.history_page import HistoryPage
+from app.ui.history_detail_page import HistoryDetailPage
+from app.ui.history_model import HistoryViewModel
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
 
@@ -269,9 +271,13 @@ class MainWindow(QMainWindow):
         self._detail_return_page = 'overview'
         self.history_page = HistoryPage(service.repo)
         self.history_page.event_activated.connect(self._history_event_selected)
+        self.history_detail_page = HistoryDetailPage()
+        self.history_detail_page.back_requested.connect(lambda: self.navigate_to('history'))
+        self.history_detail_page.period_requested.connect(self._open_history_period)
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll),
-                              'employee_detail': self.page_host.addWidget(self.employee_detail_page)}
+                              'employee_detail': self.page_host.addWidget(self.employee_detail_page),
+                              'history_detail': self.page_host.addWidget(self.history_detail_page)}
         for page_id, action_text, action in (
             ('review', '', None),
             ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
@@ -839,7 +845,24 @@ class MainWindow(QMainWindow):
         self.navigate_to('history')
 
     def _history_event_selected(self, event_id):
-        self.statusBar().showMessage(f'เลือกประวัติรายการ {event_id}')
+        row = self.service.repo.audit_event(event_id)
+        if not row:
+            self.statusBar().showMessage('ไม่พบประวัติรายการที่เลือก')
+            return
+        event = HistoryViewModel().event(row)
+        timeline = ()
+        if row.get('year') is not None and row.get('month') is not None:
+            timeline = HistoryViewModel().events(self.service.repo.audit_events(
+                limit=100, year=row['year'], month=row['month']))
+        self.history_detail_page.refresh(event.__dict__, employee_name=self.service.repo.employee_name(row.get('employee_id')),
+                                         timeline=timeline)
+        self.page_host.setCurrentIndex(self._page_indexes['history_detail'])
+        self.page_header.set_content('รายละเอียดประวัติ', 'แสดงเฉพาะข้อมูลที่บันทึกไว้ และไม่เปลี่ยนรอบเงินเดือนจนกว่าจะเลือกเปิดรอบ')
+
+    def _open_history_period(self, year, month):
+        self.year.setValue(year)
+        self.month.setValue(month)
+        self.navigate_to('overview')
 
     def settings(self):
         self.navigate_to('settings')

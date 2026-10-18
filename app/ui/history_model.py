@@ -14,6 +14,8 @@ class HistoryEvent:
     action_label: str
     actor: str
     employee_id: str | None
+    year: int | None
+    month: int | None
     period_label: str
     source: str
     old_value: object
@@ -52,7 +54,7 @@ def decode_audit_value(value):
 class HistoryViewModel:
     def event(self, row):
         return HistoryEvent(row['id'], thai_timestamp(row.get('timestamp')), row.get('action', ''),
-                            text(row.get('action', '')), row.get('actor') or '—', row.get('employee_id'),
+                            text(row.get('action', '')), row.get('actor') or '—', row.get('employee_id'), row.get('year'), row.get('month'),
                             thai_period(row.get('year'), row.get('month')), row.get('source') or '—',
                             decode_audit_value(row.get('old_value')), decode_audit_value(row.get('new_value')))
 

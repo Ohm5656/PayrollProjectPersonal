@@ -270,6 +270,12 @@ class Repository:
                              'FROM audit_log WHERE id=?', (int(event_id),))
         return rows[0] if rows else None
 
+    def employee_name(self, employee_id):
+        if not employee_id:
+            return None
+        rows = self.db.query('SELECT canonical_name FROM employees WHERE id=?', (employee_id,))
+        return rows[0]['canonical_name'] if rows else None
+
     def audit_filter_values(self):
         return {
             'years': [row['year'] for row in self.db.query('SELECT DISTINCT year FROM audit_log WHERE year IS NOT NULL ORDER BY year DESC')],
