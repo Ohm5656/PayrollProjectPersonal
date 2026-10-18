@@ -10,6 +10,7 @@ from app.services.automation_job_service import AutomationJobState
 
 class ProblemsPage(QWidget):
     job_selected = Signal(str)
+    staged_writes_requested = Signal()
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
@@ -68,7 +69,10 @@ class ProblemsPage(QWidget):
         self.open_detail = QPushButton('ดูรายละเอียดรายการที่เลือก')
         self.open_detail.setProperty('role', 'primary')
         self.open_detail.clicked.connect(self.open_current)
-        layout.addWidget(self.open_detail)
+        self.inspect_writes = QPushButton('ดูรายการเขียน Excel ที่ต้องตรวจสอบ')
+        self.inspect_writes.clicked.connect(self.staged_writes_requested)
+        action_row = QHBoxLayout(); action_row.addWidget(self.open_detail); action_row.addWidget(self.inspect_writes); action_row.addStretch()
+        layout.addLayout(action_row)
         self.refresh()
 
     def refresh(self):
@@ -81,6 +85,7 @@ class ProblemsPage(QWidget):
             detail.setText(status.detail)
             card.setProperty('semantic', 'warning' if status.requires_action else 'neutral')
         self._render_jobs()
+        self.inspect_writes.setEnabled(bool(self.snapshot_data.staged_writes))
 
     def _render_jobs(self, *_):
         state = self.filter.currentData()

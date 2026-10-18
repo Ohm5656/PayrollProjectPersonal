@@ -28,6 +28,7 @@ from app.ui.history_detail_page import HistoryDetailPage
 from app.ui.history_model import HistoryViewModel
 from app.ui.problems_model import ProblemsViewModel
 from app.ui.problems_page import ProblemsPage
+from app.ui.problems_detail_page import ProblemJobDetailPage, StagedWriteInspectionPage
 from app.services.payroll_service import PayrollStateError
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
@@ -279,10 +280,18 @@ class MainWindow(QMainWindow):
         self.history_detail_page.back_requested.connect(lambda: self.navigate_to('history'))
         self.history_detail_page.period_requested.connect(self._open_history_period)
         self.problems_page = ProblemsPage(self.problems_model)
+        self.problems_page.job_selected.connect(self._problem_job_selected)
+        self.problems_page.staged_writes_requested.connect(self._show_staged_writes)
+        self.problem_detail_page = ProblemJobDetailPage()
+        self.problem_detail_page.back_requested.connect(lambda: self.navigate_to('problems'))
+        self.staged_write_page = StagedWriteInspectionPage()
+        self.staged_write_page.back_requested.connect(lambda: self.navigate_to('problems'))
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll),
                               'employee_detail': self.page_host.addWidget(self.employee_detail_page),
-                              'history_detail': self.page_host.addWidget(self.history_detail_page)}
+                              'history_detail': self.page_host.addWidget(self.history_detail_page),
+                              'problem_detail': self.page_host.addWidget(self.problem_detail_page),
+                              'staged_writes': self.page_host.addWidget(self.staged_write_page)}
         for page_id, action_text, action in (
             ('review', '', None),
             ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
@@ -884,6 +893,21 @@ class MainWindow(QMainWindow):
 
     def history(self):
         self.navigate_to('history')
+
+    def _problem_job_selected(self, job_id):
+        job = self.problems_model.jobs.get(job_id)
+        if not job:
+            self.statusBar().showMessage('ไม่พบรายการงานที่เลือก')
+            return
+        self.problem_detail_page.refresh(job, self.problems_model.job(job))
+        self.page_host.setCurrentIndex(self._page_indexes['problem_detail'])
+        self.page_header.set_content('รายละเอียดปัญหา', 'แสดงข้อมูลที่บันทึกไว้และแนวทางดำเนินการอย่างปลอดภัย')
+
+    def _show_staged_writes(self):
+        snapshot = self.problems_model.snapshot(limit=50)
+        self.staged_write_page.refresh(snapshot.staged_writes)
+        self.page_host.setCurrentIndex(self._page_indexes['staged_writes'])
+        self.page_header.set_content('ตรวจสอบการเขียน Excel', 'รายการค้างตรวจสอบแบบอ่านอย่างเดียว')
 
     def _history_event_selected(self, event_id):
         row = self.service.repo.audit_event(event_id)

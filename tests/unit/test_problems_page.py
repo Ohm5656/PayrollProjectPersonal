@@ -44,3 +44,19 @@ def test_problems_navigation_is_read_only_and_never_creates_watcher(qt_app, draf
     assert runtime.watcher is None
     assert service.repo.setting('watch_enabled') is False
     window.close()
+
+
+def test_problem_detail_keeps_persisted_job_identity_and_safe_source_name(qt_app, draft_case, workbook_workspace):
+    service = PayrollService(draft_case[0])
+    failed = _failed_job(service, workbook_workspace / 'private-source.xlsx')
+    before = AutomationJobService(service.repo).get(failed['id'])
+    window = MainWindow(service)
+
+    window.navigate_to('problems')
+    window._problem_job_selected(failed['id'])
+
+    assert window.page_host.currentWidget() is window.problem_detail_page
+    assert window.problem_detail_page.values['source'].text() == 'private-source.xlsx'
+    assert str(workbook_workspace) not in window.problem_detail_page.values['source'].text()
+    assert AutomationJobService(service.repo).get(failed['id']) == before
+    window.close()
