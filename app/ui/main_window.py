@@ -18,7 +18,7 @@ from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
 from app.ui.review import DecisionDialog, EmployeeReview, PayslipMappingDialog, ReviewCenter, ZeroManualReview, money
 from app.ui.presentation import text,error_text
 from app.ui.components import NavigationButton, PageHeader
-from app.ui.overview_model import OverviewViewModel, overview_action
+from app.ui.overview_model import OverviewViewModel, overview_action, thai_period
 from app.ui.overview_page import OverviewPage
 from app.ui.review_queue_model import ReviewQueueModel
 from app.ui.review_queue_page import ReviewQueuePage
@@ -116,11 +116,11 @@ class MainWindow(QMainWindow):
 
         self.navigation_buttons = {}
         self.page_metadata = {
-            'overview': ('ภาพรวม', 'พื้นที่ทำงานเงินเดือนปัจจุบัน (จะย้ายเป็น Overview เต็มรูปแบบใน Phase D.2)'),
-            'review': ('รอตรวจสอบ', 'เปิดศูนย์ตรวจสอบรายการปัจจุบัน; Review Queue เต็มรูปแบบอยู่ใน Phase D.3'),
-            'history': ('ประวัติ', 'เปิดประวัติการตรวจสอบปัจจุบัน; หน้าประวัติใหม่อยู่ใน Phase D.4'),
-            'problems': ('ปัญหาและการกู้คืน', 'สถานะและการกู้คืนเชิงลึกจะย้ายใน Phase D.5'),
-            'settings': ('ตั้งค่า', 'เปิดหน้าตั้งค่าปัจจุบัน; หน้าตั้งค่าใหม่อยู่ใน Phase D.6'),
+            'overview': ('ภาพรวม', 'สถานะของรอบเงินเดือนที่เลือกและขั้นตอนถัดไปที่ปลอดภัย'),
+            'review': ('รอตรวจสอบ', 'รายการที่ต้องตรวจสอบก่อนยืนยันเงินเดือนของรอบที่เลือก'),
+            'history': ('ประวัติ', 'ค้นหาและตรวจสอบเหตุการณ์ที่บันทึกไว้แบบอ่านอย่างเดียว'),
+            'problems': ('ปัญหาและการกู้คืน', 'ตรวจสอบงานเบื้องหลัง การตั้งค่า และแนวทางแก้ไขอย่างปลอดภัย'),
+            'settings': ('ตั้งค่า', 'โฟลเดอร์ทำงาน การเริ่มพร้อม Windows และสถานะการเฝ้าดูไฟล์'),
         }
         for page_id, label in (('overview', 'ภาพรวม'), ('review', 'รอตรวจสอบ'), ('history', 'ประวัติ'),
                                ('problems', 'ปัญหาและการกู้คืน'), ('settings', 'ตั้งค่า')):
@@ -171,10 +171,10 @@ class MainWindow(QMainWindow):
         self.month = QSpinBox()
         self.month.setRange(1, 12)
         self.month.setValue(now.month)
-        self.month.valueChanged.connect(self.refresh_overview)
-        self.month.valueChanged.connect(self.refresh_review_queue)
-        self.year.valueChanged.connect(self.refresh_overview)
-        self.year.valueChanged.connect(self.refresh_review_queue)
+        self.month.setAccessibleName('เลือกเดือนของรอบเงินเดือน')
+        self.year.setAccessibleName('เลือกปี ค.ศ. ของรอบเงินเดือน')
+        self.month.valueChanged.connect(self._period_changed)
+        self.year.valueChanged.connect(self._period_changed)
         period.addWidget(QLabel('เดือน'))
         period.addWidget(self.month)
         period.addWidget(QLabel('ปี ค.ศ.'))
@@ -202,6 +202,23 @@ class MainWindow(QMainWindow):
         manual_layout.addLayout(sources)
         self.manual_recovery.setVisible(not self.workflow.configured())
         layout.addWidget(self.manual_recovery)
+        # Reuse the authoritative controls above in the shell context.  The
+        # legacy recovery surface consequently has no separate period state.
+        self.period_context = QWidget()
+        period_context_layout = QHBoxLayout(self.period_context)
+        period_context_layout.setContentsMargins(0, 0, 0, 0)
+        period_context_layout.setSpacing(8)
+        context_label = QLabel('รอบเงินเดือน')
+        context_label.setProperty('role', 'supporting')
+        self.period_context_label = QLabel()
+        self.period_context_label.setProperty('role', 'sectionTitle')
+        period_context_layout.addWidget(context_label)
+        period_context_layout.addWidget(self.month)
+        period_context_layout.addWidget(self.year)
+        period_context_layout.addWidget(self.period_context_label)
+        period_context_layout.addStretch()
+        self._content_layout.insertWidget(1, self.period_context)
+        self._update_period_context()
         self._legacy_cards = QWidget()
         self._legacy_cards.setVisible(False)
         cards = QGridLayout(self._legacy_cards)
@@ -370,7 +387,19 @@ class MainWindow(QMainWindow):
     def show_legacy_workflow(self):
         """Keep every unmigrated payroll operation reachable during D.2."""
         self.page_host.setCurrentIndex(self._page_indexes['legacy'])
-        self.page_header.set_content('เครื่องมือเงินเดือน', 'เครื่องมือเดิมที่ยังไม่ได้ย้ายเข้าสู่ Overview')
+        for candidate, button in self.navigation_buttons.items():
+            button.setChecked(candidate == 'overview')
+        self.page_header.set_content('เครื่องมือเพิ่มเติม', 'การดำเนินการขั้นสูงสำหรับการทดสอบ การกู้คืน และงานเฉพาะกรณี')
+
+    def _update_period_context(self):
+        if hasattr(self, 'period_context_label'):
+            self.period_context_label.setText(thai_period(self.year.value(), self.month.value()))
+
+    def _period_changed(self, *_):
+        """Refresh the currently selected persisted period without side effects."""
+        self._update_period_context()
+        self.refresh_overview()
+        self.refresh_review_queue()
 
     def refresh_overview(self, *_):
         snapshot = self.overview_model.snapshot(
