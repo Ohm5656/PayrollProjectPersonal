@@ -11,6 +11,8 @@ from app.services.payroll_service import PayrollService
 from app.services.windows_startup import StartupResult, StartupState, StartupStatus
 from app.ui.main_window import MainWindow
 from app.ui.tray import PayrollTray
+from app.safety import TEST_ROOT
+from PySide6.QtWidgets import QMessageBox
 
 
 class FolderWatcher:
@@ -117,4 +119,49 @@ def test_tray_settings_opens_embedded_page_without_changing_monitoring(qt_app, w
     assert window.page_host.currentWidget() is window.settings_page
     assert runtime.repo.setting('watch_enabled', None) is False and runtime.watcher is None
     tray.hide()
+    window.close()
+
+
+def test_repair_is_explicit_and_save_never_repairs_implicitly(qt_app, workbook_workspace):
+    startup = FakeStartup()
+    startup.state = StartupState.NEEDS_REPAIR
+    window, runtime = configured_window(workbook_workspace, startup)
+    runtime.repo.set_setting('watch_enabled', False)
+
+    assert not window._save_settings(settings_values(window, startup=True))
+    assert startup.repair_calls == 0 and startup.install_calls == 0
+    assert window._repair_startup()
+    assert startup.repair_calls == 1 and startup.state == StartupState.VALID
+    assert runtime.repo.setting('watch_enabled', None) is False and runtime.watcher is None
+    window.close()
+
+
+def test_dirty_settings_navigation_requires_explicit_discard(qt_app, workbook_workspace, monkeypatch):
+    window, runtime = configured_window(workbook_workspace, FakeStartup())
+    runtime.repo.set_setting('watch_enabled', False)
+    window.settings()
+    window.settings_page.attendance.edit.setText('unsaved')
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.No)
+
+    assert not window.navigate_to('overview')
+    assert window.page_host.currentWidget() is window.settings_page
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Yes)
+    assert window.navigate_to('overview')
+    assert runtime.repo.setting('watch_enabled', None) is False and runtime.watcher is None
+    window.close()
+
+
+def test_invalid_workflow_never_attempts_startup_or_production_write(qt_app, workbook_workspace, tmp_path):
+    startup = FakeStartup()
+    window, runtime = configured_window(workbook_workspace, startup)
+    before = set(TEST_ROOT.rglob('*.xlsx'))
+    values = settings_values(window, startup=True)
+    values['attendance_folder'] = str(tmp_path)
+    values['payroll_folder'] = str(tmp_path)
+
+    assert not window._save_settings(values)
+
+    assert startup.install_calls == startup.remove_calls == startup.repair_calls == 0
+    assert set(TEST_ROOT.rglob('*.xlsx')) == before
+    assert runtime.watcher is None
     window.close()
