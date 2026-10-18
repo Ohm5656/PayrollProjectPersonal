@@ -367,6 +367,9 @@ class MainWindow(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
+                for candidate, button in self.navigation_buttons.items():
+                    button.setChecked(candidate == 'settings')
+                self.navigation_buttons['settings'].setFocus(Qt.OtherFocusReason)
                 return False
         self.page_host.setCurrentIndex(self._page_indexes[page_id])
         for candidate, button in self.navigation_buttons.items():
