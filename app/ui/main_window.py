@@ -78,6 +78,8 @@ class MainWindow(QMainWindow):
         self.settings_model = SettingsViewModel(self.workflow, runtime=runtime,
                                                 startup_service=self.startup_service)
         self.draft, self.run, self.busy = None, None, False
+        self._source_period = None
+        self._employee_detail_period = None
         self.tray = getattr(QApplication.instance(), 'payroll_tray', None)
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
@@ -327,6 +329,10 @@ class MainWindow(QMainWindow):
                     else self.problems_page if page_id == 'problems' else self.settings_page)
             self._page_indexes[page_id] = self.page_host.addWidget(page)
         self.navigate_to('overview')
+        # Initial presentation must not hydrate a persisted draft implicitly.
+        # Loading is deliberately reserved for an explicit period-selector
+        # change, so canceling a protected workflow cannot restore an old
+        # write target merely by opening this window.
         self.refresh_overview()
         self.refresh_review_queue()
         self._apply_responsive_shell()
@@ -401,18 +407,50 @@ class MainWindow(QMainWindow):
     def _period_changed(self, *_):
         """Refresh the currently selected persisted period without side effects."""
         self._update_period_context()
+        self._load_selected_period_presentation()
+
+    def _selected_period(self):
+        return self.year.value(), self.month.value()
+
+    def _draft_matches_selected_period(self, draft=None):
+        candidate = self.draft if draft is None else draft
+        return bool(candidate and (candidate.year, candidate.month) == self._selected_period())
+
+    def _selected_sources(self):
+        """Expose manually selected copies only when they belong to this period.
+
+        A manually selected copy becomes period-scoped once it has prepared a
+        draft or was selected/prepared through the current UI.  On a later
+        period change, stale paths remain untouched as preferences but are not
+        represented as usable inputs for the new period.
+        """
+        if self._source_period and self._source_period != self._selected_period():
+            return {}
+        return {'attendance': self.attendance.text(), 'payroll': self.payroll.text()}
+
+    def _load_selected_period_presentation(self):
+        """Read and render only persisted state for the selected period."""
+        self.run, self.draft = self.service.current(*self._selected_period())
+        if self._employee_detail_period and self._employee_detail_period != self._selected_period():
+            self._employee_detail_period = None
+            if self.page_host.currentIndex() == self._page_indexes.get('employee_detail'):
+                self.navigate_to(self._detail_return_page)
+        self._render_legacy_summary(self.draft, self.run)
+        self._render_employee_table(self.draft)
+        self.update_buttons()
         self.refresh_overview()
         self.refresh_review_queue()
 
     def refresh_overview(self, *_):
+        sources = self._selected_sources()
         snapshot = self.overview_model.snapshot(
             self.year.value(), self.month.value(),
-            selected_sources={'attendance': self.attendance.text(), 'payroll': self.payroll.text()},
+            selected_sources=sources,
         )
         self.overview_page.refresh(snapshot, busy=self.busy)
         action = overview_action(
             snapshot,
-            has_sources=bool(self.attendance.text() and self.payroll.text()),
+            has_sources=bool(sources.get('attendance') and sources.get('payroll')),
             writer_available=self.writer is not None,
             busy=self.busy,
         )
@@ -454,6 +492,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage('ไม่พบข้อมูลพนักงานสำหรับรอบที่เลือก')
             return False
         self._detail_return_page = return_page
+        self._employee_detail_period = self._selected_period()
         self.run, self.draft = run, draft
         self.employee_detail_page.refresh(draft, employee, run)
         self.page_host.setCurrentIndex(self._page_indexes['employee_detail'])
@@ -585,7 +624,7 @@ class MainWindow(QMainWindow):
 
     def clear_source_selection(self):
         self.run,self.draft=None,None
-        self.table.setRowCount(0)
+        self._render_employee_table(None)
         for card in self.cards.values(): card.setText('—')
         self.update_buttons()
         self.refresh_overview()
@@ -646,6 +685,7 @@ class MainWindow(QMainWindow):
             return
         getattr(self, key).setText(path)
         self.service.repo.set_setting(key + '_path', path)
+        self._source_period = self._selected_period()
         self.clear_source_selection()
         self.update_manual_runtime_sources()
 
@@ -678,6 +718,7 @@ class MainWindow(QMainWindow):
             for kind, path in paths.items():
                 getattr(self, kind).setText(path)
                 self.service.repo.set_setting(kind + '_path', path)
+            self._source_period = self._selected_period()
             self.clear_source_selection()
             self.statusBar().showMessage('เตรียมสำเนาแล้ว กดอ่านข้อมูลเพื่อเริ่มตรวจสอบ')
             self.update_manual_runtime_sources()
@@ -687,6 +728,9 @@ class MainWindow(QMainWindow):
         if not self.attendance.text() or not self.payroll.text():
             self.statusBar().showMessage('กรุณาเลือกไฟล์สำเนาทั้งสองไฟล์')
             return
+        if self._source_period and self._source_period != self._selected_period():
+            self.statusBar().showMessage('ไฟล์สำเนาที่เลือกเป็นคนละรอบ กรุณาเลือกหรือเตรียมสำเนาสำหรับรอบนี้')
+            return
         attendance_path, payroll_path = Path(self.attendance.text()), Path(self.payroll.text())
         year, month = self.year.value(), self.month.value()
         self.service.repo.set_setting('actor', self.actor.text())
@@ -694,6 +738,7 @@ class MainWindow(QMainWindow):
 
     def show_result(self, result):
         self.run, self.draft = result['run'], result['draft']
+        self._source_period = (self.draft.year, self.draft.month)
         if self.runtime:
             self.runtime.review_resolved(self.run)
         self.render()
@@ -704,15 +749,43 @@ class MainWindow(QMainWindow):
         draft = self.draft
         if not draft:
             return
+        self.year.blockSignals(True)
+        self.month.blockSignals(True)
         self.year.setValue(draft.year)
         self.month.setValue(draft.month)
+        self.year.blockSignals(False)
+        self.month.blockSignals(False)
+        self._update_period_context()
+        self._render_legacy_summary(draft, self.run)
+        self._render_employee_table(draft)
+        self.state_changed.emit('review' if self.run['state'] == PayrollState.NEEDS_REVIEW else 'ready')
+        self.statusBar().showMessage(f'เดือน {draft.month}/{draft.year + 543} — {STATE_TEXT[self.run["state"]]}')
+        self.update_buttons()
+        self.refresh_overview()
+        self.refresh_review_queue()
+
+    def _render_legacy_summary(self, draft, run):
+        """Keep compatibility values aligned with the visible selected period."""
+        if not draft or not run:
+            for card in self.cards.values():
+                card.setText('—')
+            return
         self.cards['attendance'].setText(Path(draft.source_path).name)
         source=Path(draft.source_path)
         saved=datetime.fromtimestamp(source.stat().st_mtime,timezone(timedelta(hours=7))).strftime('%d/%m/%Y %H:%M:%S') if source.is_file() else 'ไม่พบไฟล์สำเนา'
         self.cards['save'].setText(saved)
         self.cards['employees'].setText(str(sum(bool(e.employee_id) for e in draft.employees)))
         self.cards['issues'].setText(str(len(draft.issues)))
-        self.cards['state'].setText(STATE_TEXT.get(self.run['state'], self.run['state']))
+        self.cards['state'].setText(STATE_TEXT.get(run['state'], run['state']))
+
+    def _render_employee_table(self, draft):
+        """Render selected-period employees or clear every stale row/selection."""
+        self.table.clearContents()
+        self.table.clearSelection()
+        self.table.setCurrentItem(None)
+        if not draft:
+            self.table.setRowCount(0)
+            return
         self.table.setRowCount(len(draft.employees))
         for row, employee in enumerate(draft.employees):
             def amount(field):
@@ -732,10 +805,6 @@ class MainWindow(QMainWindow):
                     item.setToolTip(', '.join(THAI_FIELDS.get(v.field, v.field) for v in special) or 'ไม่มีรายการพิเศษ')
                 self.table.setItem(row, column, item)
         self.table.resizeColumnsToContents()
-        self.state_changed.emit('review' if self.run['state'] == PayrollState.NEEDS_REVIEW else 'ready')
-        self.statusBar().showMessage(f'เดือน {draft.month}/{draft.year + 543} — {STATE_TEXT[self.run["state"]]}')
-        self.update_buttons()
-        self.refresh_overview()
 
     @staticmethod
     def _amount(value):
@@ -761,10 +830,11 @@ class MainWindow(QMainWindow):
 
     def selected_employee(self):
         if self.page_host.currentIndex() == self._page_indexes.get('employee_detail'):
-            return self.employee_detail_page._employee
-        if not self.draft or self.table.currentRow() < 0:
+            return self.employee_detail_page._employee if self._employee_detail_period == self._selected_period() else None
+        if not self._draft_matches_selected_period() or self.table.currentRow() < 0:
             return None
-        return self.draft.employees[self.table.currentRow()]
+        row = self.table.currentRow()
+        return self.draft.employees[row] if row < len(self.draft.employees) else None
 
     def profile_dialog(self):
         employee = self.selected_employee()
