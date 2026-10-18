@@ -241,5 +241,41 @@ class Repository:
     def audit_history(self, limit=200):
         return self.db.query('SELECT timestamp,action,year,month,actor FROM audit_log ORDER BY id DESC LIMIT ?', (limit,))
 
+    def audit_events(self, *, limit=50, before_id=None, year=None, month=None, action=None, actor=None):
+        """Read a bounded, stable page of audit evidence without changing history."""
+        limit = max(1, min(int(limit), 200))
+        clauses, args = [], []
+        if before_id is not None:
+            clauses.append('id < ?')
+            args.append(int(before_id))
+        for column, value in (('year', year), ('month', month), ('action', action), ('actor', actor)):
+            if value is not None:
+                clauses.append(f'{column} = ?')
+                args.append(value)
+        where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
+        return self.db.query('SELECT id,timestamp,action,employee_id,year,month,old_value,new_value,source,actor '
+                             'FROM audit_log' + where + ' ORDER BY id DESC LIMIT ?', (*args, limit))
+
+    def audit_event_count(self, *, year=None, month=None, action=None, actor=None):
+        clauses, args = [], []
+        for column, value in (('year', year), ('month', month), ('action', action), ('actor', actor)):
+            if value is not None:
+                clauses.append(f'{column} = ?')
+                args.append(value)
+        where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
+        return self.db.query('SELECT COUNT(*) AS count FROM audit_log' + where, args)[0]['count']
+
+    def audit_event(self, event_id):
+        rows = self.db.query('SELECT id,timestamp,action,employee_id,year,month,old_value,new_value,source,actor '
+                             'FROM audit_log WHERE id=?', (int(event_id),))
+        return rows[0] if rows else None
+
+    def audit_filter_values(self):
+        return {
+            'years': [row['year'] for row in self.db.query('SELECT DISTINCT year FROM audit_log WHERE year IS NOT NULL ORDER BY year DESC')],
+            'actions': [row['action'] for row in self.db.query('SELECT DISTINCT action FROM audit_log ORDER BY action')],
+            'actors': [row['actor'] for row in self.db.query('SELECT DISTINCT actor FROM audit_log ORDER BY actor')],
+        }
+
     def pending_changes(self, run_id):
         return self.db.query('SELECT * FROM source_changes WHERE run_id=? AND acknowledged=0 ORDER BY id DESC', (run_id,))
