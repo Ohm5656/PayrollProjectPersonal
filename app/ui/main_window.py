@@ -20,6 +20,8 @@ from app.ui.presentation import text,error_text
 from app.ui.components import NavigationButton, PageHeader
 from app.ui.overview_model import OverviewViewModel, overview_action
 from app.ui.overview_page import OverviewPage
+from app.ui.review_queue_model import ReviewQueueModel
+from app.ui.review_queue_page import ReviewQueuePage
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
 
@@ -61,6 +63,7 @@ class MainWindow(QMainWindow):
         self.startup_service = startup_service or WindowsStartupService()
         self.overview_model = OverviewViewModel(service, runtime=runtime, writer=writer,
                                                  startup_service=self.startup_service)
+        self.review_queue_model = ReviewQueueModel()
         self.draft, self.run, self.busy = None, None, False
         self.tray = getattr(QApplication.instance(), 'payroll_tray', None)
         self.pool = QThreadPool(self)
@@ -156,7 +159,9 @@ class MainWindow(QMainWindow):
         self.month.setRange(1, 12)
         self.month.setValue(now.month)
         self.month.valueChanged.connect(self.refresh_overview)
+        self.month.valueChanged.connect(self.refresh_review_queue)
         self.year.valueChanged.connect(self.refresh_overview)
+        self.year.valueChanged.connect(self.refresh_review_queue)
         period.addWidget(QLabel('เดือน'))
         period.addWidget(self.month)
         period.addWidget(QLabel('ปี ค.ศ.'))
@@ -250,19 +255,22 @@ class MainWindow(QMainWindow):
         self.overview_page = OverviewPage()
         self.overview_page.attach_employee_table(self.table)
         self.overview_page.legacy_button.clicked.connect(self.show_legacy_workflow)
+        self.review_queue_page = ReviewQueuePage()
+        self.review_queue_page.overview_requested.connect(lambda: self.navigate_to('overview'))
+        self.review_queue_page.issue_activated.connect(self._review_issue_selected)
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll)}
         for page_id, action_text, action in (
-            ('review', 'เปิดศูนย์ตรวจสอบรายการปัจจุบัน', self.review),
+            ('review', '', None),
             ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
             ('problems', '', None),
             ('settings', 'เปิดหน้าตั้งค่าปัจจุบัน', self.settings),
         ):
-            self._page_indexes[page_id] = self.page_host.addWidget(
-                self._placeholder_page(page_id, action_text, action)
-            )
+            page = self.review_queue_page if page_id == 'review' else self._placeholder_page(page_id, action_text, action)
+            self._page_indexes[page_id] = self.page_host.addWidget(page)
         self.navigate_to('overview')
         self.refresh_overview()
+        self.refresh_review_queue()
         self._apply_responsive_shell()
         self.statusBar().showMessage('เลือกเดือนและเตรียมสำเนาข้อมูลเพื่อเริ่มทดสอบ')
         self.update_buttons()
@@ -298,6 +306,8 @@ class MainWindow(QMainWindow):
             button.setChecked(candidate == page_id)
         title, subtitle = self.page_metadata[page_id]
         self.page_header.set_content(title, subtitle)
+        if page_id == 'review':
+            self.refresh_review_queue()
         self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
 
     def show_legacy_workflow(self):
@@ -326,6 +336,15 @@ class MainWindow(QMainWindow):
             if action.action_id else None,
             busy=self.busy,
         )
+
+    def refresh_review_queue(self, *_):
+        run, draft = self.service.current(self.year.value(), self.month.value())
+        snapshot = self.review_queue_model.snapshot(draft, year=self.year.value(), month=self.month.value())
+        self.review_queue_page.refresh(snapshot)
+
+    def _review_issue_selected(self, issue):
+        """Decision routing is added in D.3.4; selection itself is read-only."""
+        self.statusBar().showMessage(f'เลือก {issue.kind}; เปิดการตัดสินใจจากรายการนี้')
 
     def _load_selected_period(self):
         """Use the persisted run for the selected period before an explicit action."""
@@ -587,8 +606,6 @@ class MainWindow(QMainWindow):
 
     def review(self):
         self.navigate_to('review')
-        if self.draft:
-            ReviewCenter(self.service, self.draft, actor=self.actor.text(), on_changed=self.read_draft, parent=self).exec()
 
     def employee_review(self, row, column=0):
         if not self.draft or self.busy or self.run['state'] in FINAL_STATES:
