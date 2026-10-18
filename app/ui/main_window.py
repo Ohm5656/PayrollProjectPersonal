@@ -26,6 +26,7 @@ from app.ui.employee_detail_page import EmployeeDetailPage
 from app.ui.history_page import HistoryPage
 from app.ui.history_detail_page import HistoryDetailPage
 from app.ui.history_model import HistoryViewModel
+from app.services.payroll_service import PayrollStateError
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
 
@@ -802,7 +803,10 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def reopen(self):
-        run,draft = (self.run,self.draft) if self.run else self.service.current(self.year.value(),self.month.value())
+        year, month = self.year.value(), self.month.value()
+        # The selector is the source of truth.  A cached draft can belong to a
+        # different month after the user has browsed the application.
+        run, draft = self.service.current(year, month)
         if not run or run['state'] not in FINAL_STATES:
             self.statusBar().showMessage('ไม่พบเดือนที่ยืนยันแล้วสำหรับเดือน/ปีที่เลือก')
             return
@@ -823,6 +827,8 @@ class MainWindow(QMainWindow):
             for col, value in enumerate([names.get(change['employee_key'],change['employee_key']),THAI_FIELDS.get(change['field'], change['field']), change['old_source'], change['new_source'], change['source_difference'],change['old_final'],change['new_draft']]):
                 table.setItem(row, col, QTableWidgetItem(str(value if value is not None else '—')))
         layout.addWidget(table)
+        if not latest['fields']:
+            layout.addWidget(QLabel('ไม่มีส่วนต่างจากแหล่งข้อมูลที่บันทึกไว้สำหรับรอบนี้'))
         acknowledged = QCheckBox('ตรวจส่วนต่างแล้ว และต้องการเปิดเดือนนี้ใหม่')
         layout.addWidget(acknowledged)
         reason = QLineEdit()
@@ -833,13 +839,41 @@ class MainWindow(QMainWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() == QDialog.Accepted and acknowledged.isChecked() and reason.text().strip():
-            self.service.reopen(draft.year, draft.month, reason=reason.text(), actor=self.actor.text())
-            self.read_draft()
+            try:
+                self.service.reopen(year, month, reason=reason.text(), actor=self.actor.text())
+            except PayrollStateError as exc:
+                self.statusBar().showMessage(error_text(str(exc)))
+                return
+            self.run, self.draft = self.service.current(year, month)
+            self._refresh_period_views()
 
     def lock(self):
-        if self.run and self.run['state'] == PayrollState.WRITTEN:
-            self.service.lock(self.draft.year, self.draft.month, actor=self.actor.text())
-            self.refresh()
+        year, month = self.year.value(), self.month.value()
+        run, draft = self.service.current(year, month)
+        if not run or run['state'] != PayrollState.WRITTEN:
+            self.statusBar().showMessage('ต้องเขียนและตรวจสอบไฟล์สำเร็จก่อนล็อกเดือน')
+            return
+        answer = QMessageBox.question(
+            self, 'ยืนยันการล็อกรอบเงินเดือน',
+            f'ล็อกรอบ {month}/{year + 543} แล้วจะไม่สามารถแก้ไขได้จนกว่าจะมีขั้นตอนเปิดรอบใหม่',
+            QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            self.service.lock(year, month, actor=self.actor.text())
+        except PayrollStateError as exc:
+            self.statusBar().showMessage(error_text(str(exc)))
+            return
+        self.run, self.draft = self.service.current(year, month)
+        self._refresh_period_views()
+
+    def _refresh_period_views(self):
+        """Refresh read models after a deliberate lifecycle transition only."""
+        if self.draft:
+            self.render()
+        self.refresh_review_queue()
+        self.history_page.refresh()
 
     def history(self):
         self.navigate_to('history')
