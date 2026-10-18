@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from app.services.automation_runtime import RuntimeState
 from app.services.windows_startup import StartupState, StartupStatus
-from app.ui.overview_model import OverviewViewModel, thai_period
+from app.ui.overview_model import OverviewViewModel, overview_action, thai_period
 from app.ui.overview_page import OverviewPage
 from tests.unit.test_draft_engine import calculate, draft_case
 from tests.unit.test_ui import qt_app
@@ -100,3 +100,31 @@ def test_overview_page_binds_real_snapshot_without_mutating_service(qt_app, draf
     assert page.review_card.value.text() == f'{len(draft.issues)} รายการ'
     assert page.empty_state.isHidden()
     assert service.calls == [(2026, 9)]
+
+
+def test_overview_action_maps_each_payroll_state_to_one_safe_explicit_step():
+    def action_for(state, **kwargs):
+        snapshot = SimpleNamespace(payroll_state=state)
+        return overview_action(snapshot, has_sources=True, writer_available=True, busy=False, **kwargs)
+
+    assert action_for('NO_DRAFT').action_id == 'read'
+    assert action_for('DRAFT').action_id == 'review'
+    assert action_for('NEEDS_REVIEW').action_id == 'review'
+    assert action_for('READY').action_id == 'confirm'
+    assert action_for('CONFIRMED').action_id == 'write'
+    assert action_for('WRITTEN').action_id == 'lock'
+    locked = action_for('LOCKED')
+    assert locked.action_id is None and not locked.visible
+
+
+def test_overview_action_disables_missing_sources_writer_and_busy_states():
+    snapshot = SimpleNamespace(payroll_state='NO_DRAFT')
+    action = overview_action(snapshot, has_sources=False, writer_available=True, busy=False)
+    assert not action.enabled and 'เลือกไฟล์สำเนา' in action.detail
+
+    snapshot.payroll_state = 'CONFIRMED'
+    action = overview_action(snapshot, has_sources=True, writer_available=False, busy=False)
+    assert action.action_id == 'write' and not action.enabled and 'ไม่มีบริการเขียน' in action.detail
+
+    snapshot.payroll_state = 'READY'
+    assert not overview_action(snapshot, has_sources=True, writer_available=True, busy=True).enabled

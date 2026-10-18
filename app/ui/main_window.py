@@ -18,7 +18,7 @@ from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
 from app.ui.review import EmployeeReview, ReviewCenter, money
 from app.ui.presentation import text,error_text
 from app.ui.components import NavigationButton, PageHeader
-from app.ui.overview_model import OverviewViewModel
+from app.ui.overview_model import OverviewViewModel, overview_action
 from app.ui.overview_page import OverviewPage
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
@@ -307,6 +307,52 @@ class MainWindow(QMainWindow):
             selected_sources={'attendance': self.attendance.text(), 'payroll': self.payroll.text()},
         )
         self.overview_page.refresh(snapshot, busy=self.busy)
+        action = overview_action(
+            snapshot,
+            has_sources=bool(self.attendance.text() and self.payroll.text()),
+            writer_available=self.writer is not None,
+            busy=self.busy,
+        )
+        self.overview_page.set_primary_action(
+            label=action.label,
+            detail=action.detail,
+            enabled=action.enabled,
+            visible=action.visible,
+            callback=(lambda action_id=action.action_id: self._run_overview_action(action_id))
+            if action.action_id else None,
+            busy=self.busy,
+        )
+
+    def _load_selected_period(self):
+        """Use the persisted run for the selected period before an explicit action."""
+        self.run, self.draft = self.service.current(self.year.value(), self.month.value())
+
+    def _run_overview_action(self, action_id):
+        """Run only the action the user explicitly clicked for the selected period."""
+        if self.busy:
+            return
+        if action_id == 'read':
+            self.read_draft()
+            return
+        self._load_selected_period()
+        state = str(self.run['state']) if self.run else 'NO_DRAFT'
+        expected_states = {
+            'review': {'DRAFT', 'NEEDS_REVIEW'},
+            'confirm': {'READY'},
+            'write': {'CONFIRMED'},
+            'lock': {'WRITTEN'},
+        }
+        if state not in expected_states.get(action_id, set()):
+            self.refresh_overview()
+            return
+        if action_id == 'review' and self.draft:
+            self.review()
+        elif action_id == 'confirm' and self.draft:
+            self.confirm()
+        elif action_id == 'write' and self.writer and self.draft:
+            self.write()
+        elif action_id == 'lock' and self.draft:
+            self.lock()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -337,6 +383,15 @@ class MainWindow(QMainWindow):
         # completed after the watcher result was queued on the GUI thread.
         result = dict(result)
         result['run'], result['draft'] = self.service.current(result['draft'].year, result['draft'].month)
+        if (result['draft'].year, result['draft'].month) != (self.year.value(), self.month.value()):
+            self.statusBar().showMessage(
+                f'มีผลลัพธ์ใหม่สำหรับเดือน {result["draft"].month}/{result["draft"].year + 543}; '
+                'เลือกรอบนั้นเพื่อดูรายละเอียด'
+            )
+            self.refresh_overview()
+            if self.exit_pending and not self.busy:
+                self._notify_shutdown_ready()
+            return
         self.show_result(result)
         if self.exit_pending and not self.busy:
             self._notify_shutdown_ready()

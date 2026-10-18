@@ -103,3 +103,42 @@ def test_shell_keeps_navigation_readable_at_desktop_and_compact_widths(qt_app, d
     assert all(button.text() for button in window.navigation_buttons.values())
     assert all(button.focusPolicy() for button in window.navigation_buttons.values())
     window.close()
+
+
+def test_overview_primary_action_is_explicit_and_requires_sources(qt_app, draft_case, monkeypatch):
+    window = MainWindow(PayrollService(draft_case[0]))
+    calls = []
+    monkeypatch.setattr(window, 'read_draft', lambda: calls.append('read'))
+
+    window.refresh_overview()
+    assert not window.overview_page.primary_action.isEnabled()
+
+    window.attendance.setText('attendance-copy.xlsx')
+    window.payroll.setText('payroll-copy.xlsx')
+    window.refresh_overview()
+    assert window.overview_page.primary_action.isEnabled()
+    window.overview_page.primary_action.click()
+
+    assert calls == ['read']
+    window.close()
+
+
+def test_background_result_for_another_period_does_not_replace_selected_context(qt_app, draft_case, monkeypatch):
+    service = PayrollService(draft_case[0])
+    window = MainWindow(service)
+    _, _, attendance, payroll = draft_case
+    from tests.unit.test_draft_engine import calculate
+    result_draft = calculate(draft_case)
+    selected_run = {'state': 'READY', 'revision': 3}
+    selected_draft = object()
+    window.run, window.draft = selected_run, selected_draft
+    window.year.setValue(2026)
+    window.month.setValue(10)
+    monkeypatch.setattr(window.workflow, 'configured', lambda: True)
+    monkeypatch.setattr(service, 'current', lambda year, month: ({'state': 'NEEDS_REVIEW', 'revision': 4}, result_draft))
+
+    window.receive_watched_result({'run': {'state': 'NEEDS_REVIEW'}, 'draft': result_draft})
+
+    assert window.run is selected_run and window.draft is selected_draft
+    assert '9/2569' in window.statusBar().currentMessage()
+    window.close()

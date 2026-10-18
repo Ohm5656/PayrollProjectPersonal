@@ -46,6 +46,11 @@ class OverviewPage(QScrollArea):
         self.next_action_text = QLabel('กำลังตรวจสอบข้อมูลของรอบที่เลือก')
         self.next_action_text.setWordWrap(True)
         self.next_action.addWidget(self.next_action_text)
+        self.primary_action = QPushButton()
+        self.primary_action.setProperty('role', 'primary')
+        self.primary_action.clicked.connect(self._trigger_primary_action)
+        self.next_action.addWidget(self.primary_action)
+        self._primary_callback = None
         layout.addWidget(self.next_action)
 
         sources = SectionContainer('ไฟล์สำเนาที่ใช้')
@@ -109,3 +114,17 @@ class OverviewPage(QScrollArea):
         else:
             self.next_action_text.setText('แสดงสถานะจากข้อมูลที่บันทึกไว้ของรอบที่เลือก')
         self.empty_state.setVisible(snapshot.payroll_state == 'NO_DRAFT')
+
+    def set_primary_action(self, *, label, detail, enabled, visible=True, callback=None, busy=False):
+        """Render one action without accumulating Qt signal connections."""
+        self._primary_callback = callback
+        self.primary_action.setVisible(visible)
+        self.primary_action.setText(label or '')
+        self.primary_action.setEnabled(bool(enabled) and not busy)
+        self.next_action_text.setText(
+            'กำลังประมวลผลข้อมูล โปรดรอผลลัพธ์จากระบบ' if busy else detail
+        )
+
+    def _trigger_primary_action(self):
+        if self._primary_callback and self.primary_action.isEnabled():
+            self._primary_callback()

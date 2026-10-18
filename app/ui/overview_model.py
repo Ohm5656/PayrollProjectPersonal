@@ -40,6 +40,43 @@ class OverviewSnapshot:
     payroll_label_source: str
 
 
+@dataclass(frozen=True)
+class OverviewAction:
+    """The one explicit, state-safe action offered by the Overview page."""
+    action_id: str | None
+    label: str | None
+    detail: str
+    enabled: bool
+    visible: bool = True
+
+
+def overview_action(snapshot, *, has_sources, writer_available, busy):
+    """Map persisted payroll state to one action without performing it."""
+    state = snapshot.payroll_state
+    if state == 'NO_DRAFT':
+        detail = ('เลือกไฟล์สำเนาบันทึกเวลาและไฟล์เงินเดือน แล้วอ่านข้อมูลเพื่อเตรียมฉบับร่าง'
+                  if has_sources else 'โปรดเลือกไฟล์สำเนาบันทึกเวลาและไฟล์เงินเดือนก่อน')
+        return OverviewAction('read', 'อ่านข้อมูลและเตรียมฉบับร่าง', detail,
+                              bool(has_sources) and not busy)
+    if state in {'DRAFT', 'NEEDS_REVIEW'}:
+        return OverviewAction('review', 'ตรวจสอบรายการ',
+                              'ตรวจสอบและแก้ไขรายการที่ต้องยืนยันก่อนดำเนินการต่อ', not busy)
+    if state == 'READY':
+        return OverviewAction('confirm', 'ยืนยันเงินเดือน',
+                              'ข้อมูลพร้อมยืนยันแล้ว การยืนยันยังไม่เขียนข้อมูลลง Excel', not busy)
+    if state == 'CONFIRMED':
+        detail = ('ยืนยันแล้ว พร้อมเขียนลงไฟล์สำเนา'
+                  if writer_available else 'ยังไม่มีบริการเขียนไฟล์สำเนา จึงไม่สามารถเขียน Excel ได้')
+        return OverviewAction('write', 'เขียนลงไฟล์สำเนา', detail,
+                              bool(writer_available) and not busy)
+    if state == 'WRITTEN':
+        return OverviewAction('lock', 'ปิดรอบเงินเดือน',
+                              'ตรวจสอบไฟล์สำเนาแล้วจึงปิดรอบเงินเดือน', not busy)
+    if state == 'LOCKED':
+        return OverviewAction(None, None, 'รอบเงินเดือนถูกปิดแล้ว', False, visible=False)
+    return OverviewAction(None, None, 'ไม่สามารถระบุขั้นตอนถัดไปของรอบที่เลือกได้', False, visible=False)
+
+
 def thai_period(year, month):
     if not 1 <= int(month) <= 12:
         raise ValueError('Month must be between 1 and 12')
