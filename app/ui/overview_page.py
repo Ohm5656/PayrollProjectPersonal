@@ -65,10 +65,19 @@ class OverviewPage(QScrollArea):
         self.empty_state.addWidget(self.empty_text)
         layout.addWidget(self.empty_state)
 
+        self.employee_section = SectionContainer('ข้อมูลพนักงาน')
+        self.employee_hint = QLabel('เลือกแถวเพื่อดูและตรวจสอบข้อมูลพนักงาน')
+        self.employee_hint.setProperty('role', 'supporting')
+        self.employee_section.addWidget(self.employee_hint)
+        layout.addWidget(self.employee_section)
+
         self.legacy_button = QPushButton('เปิดเครื่องมือเงินเดือนเพิ่มเติม')
         self.legacy_button.setToolTip('เครื่องมือเดิมสำหรับการเตรียมสำเนา โปรไฟล์ ปฏิทิน และงานขั้นสูง')
         layout.addWidget(self.legacy_button)
         layout.addStretch()
+
+    def attach_employee_table(self, table):
+        self.employee_section.addWidget(table)
 
     @staticmethod
     def _metric(title):

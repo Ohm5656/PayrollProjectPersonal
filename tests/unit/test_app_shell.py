@@ -40,10 +40,10 @@ def test_compatibility_controls_remain_in_overview_page(qt_app, draft_case):
     for control in (
         window.read_button, window.review_button, window.profile_button, window.confirm_button,
         window.write_button, window.slips_button, window.month8_uat_button, window.copy_button,
-        window.table,
     ):
         assert control.parentWidget() is not None
         assert window.compatibility_page.isAncestorOf(control)
+    assert window.overview_page.employee_section.isAncestorOf(window.table)
     assert window.read_button.property('role') == 'primary'
     window.close()
 

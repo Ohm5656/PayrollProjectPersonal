@@ -45,8 +45,12 @@ def test_main_window_thai_columns_and_review_gate(qt_app, draft_case):
     draft = calculate(draft_case)
     window = MainWindow(service)
     window.show_result({'run': {'state': 'NEEDS_REVIEW', 'revision': 1}, 'draft': draft})
-    assert window.table.horizontalHeaderItem(0).text() == 'ชื่อ'
-    assert window.table.item(0, 3).text() == '1,500.00'
+    assert window.table.horizontalHeaderItem(0).text() == 'ชื่อพนักงาน'
+    assert window.table.horizontalHeaderItem(1).text() == 'OT ปกติ (ชม.)'
+    assert window.table.horizontalHeaderItem(5).text() == 'เบี้ยขยัน'
+    assert window.table.item(0, 4).text() == '1,500.00'
+    assert window.table.item(0, 1).text() == '0'
+    assert window.table.item(0, 6).text().endswith('รายการ')
     assert not window.confirm_button.isEnabled()
     assert window.review_button.isEnabled()
     assert not window.write_button.isEnabled()

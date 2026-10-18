@@ -196,13 +196,12 @@ class MainWindow(QMainWindow):
             cards.addWidget(box, 0, index)
             self.cards[key] = value
         layout.addLayout(cards)
-        self.table = QTableWidget(0, 7)
-        self.table.setHorizontalHeaderLabels(['ชื่อ', 'OT', 'เบี้ยเลี้ยง', 'ค่าเดินทาง', 'เบี้ยขยัน', 'รายการพิเศษ', 'สถานะ'])
+        self.table = QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels(['ชื่อพนักงาน', 'OT ปกติ (ชม.)', 'OT วันหยุด (ชม.)', 'เบี้ยเลี้ยง', 'ค่าเดินทาง', 'เบี้ยขยัน', 'รายการพิเศษ (จำนวน)', 'สถานะ'])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.table.setAlternatingRowColors(True)
         self.table.cellDoubleClicked.connect(self.employee_review)
-        layout.addWidget(self.table)
         actions = QHBoxLayout()
         self.read_button = QPushButton('อ่านข้อมูล / คำนวณฉบับร่าง')
         self.read_button.setProperty('role', 'primary')
@@ -245,6 +244,7 @@ class MainWindow(QMainWindow):
         self.compatibility_scroll.setWidgetResizable(True)
         self.compatibility_scroll.setWidget(self.compatibility_page)
         self.overview_page = OverviewPage()
+        self.overview_page.attach_employee_table(self.table)
         self.overview_page.legacy_button.clicked.connect(self.show_legacy_workflow)
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll)}
@@ -498,18 +498,33 @@ class MainWindow(QMainWindow):
                 return employee.values[field].final_value if field in employee.values else None
             critical = any(i.critical for i in employee.issues)
             status = 'พร้อม' if employee.ready else 'มีข้อผิดพลาด' if any(i.kind.startswith('SOURCE_') and i.critical for i in employee.issues) else 'ต้องตรวจสอบ' if employee.issues else 'ยังไม่มีข้อมูล'
-            texts = [employee.name, f'{money(amount("normal_ot"))} / {money(amount("holiday_ot"))}',
-                money(amount('allowance')), money(amount('travel')), money(amount('bonus')),
-                str(sum(v.final_value not in (None, 0) for k, v in employee.values.items() if k not in {'travel','allowance','bonus','base','normal_ot','holiday_ot','holiday_days'})), status]
+            special = [v for k, v in employee.values.items() if k not in {'travel', 'allowance', 'bonus', 'base', 'normal_ot', 'holiday_ot', 'holiday_days'} and v.final_value not in (None, 0)]
+            texts = [employee.name, self._hours(amount('normal_ot')), self._hours(amount('holiday_ot')),
+                self._amount(amount('allowance')), self._amount(amount('travel')), self._amount(amount('bonus')),
+                f'{len(special)} รายการ', status]
             for column, text in enumerate(texts):
                 item = QTableWidgetItem(text)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                if 1 <= column <= 6:
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                if column == 6:
+                    item.setToolTip(', '.join(THAI_FIELDS.get(v.field, v.field) for v in special) or 'ไม่มีรายการพิเศษ')
                 self.table.setItem(row, column, item)
         self.table.resizeColumnsToContents()
         self.state_changed.emit('review' if self.run['state'] == PayrollState.NEEDS_REVIEW else 'ready')
         self.statusBar().showMessage(f'เดือน {draft.month}/{draft.year + 543} — {STATE_TEXT[self.run["state"]]}')
         self.update_buttons()
         self.refresh_overview()
+
+    @staticmethod
+    def _amount(value):
+        return '—' if value is None else f'{value:,.2f}'
+
+    @staticmethod
+    def _hours(value):
+        if value is None:
+            return '—'
+        return format(value, 'f').rstrip('0').rstrip('.') or '0'
 
     def review(self):
         self.navigate_to('review')
