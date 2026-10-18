@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
     QApplication, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from app.domain import FINAL_STATES, PayrollState, THAI_FIELDS, decimal_value
+from app.domain import FINAL_STATES, PayrollState, ReviewIssue, THAI_FIELDS, decimal_value, issue_key
 from app.excel.workbook_source import discover_workbooks, file_hash, filename_month
 from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
-from app.ui.review import EmployeeReview, ReviewCenter, money
+from app.ui.review import DecisionDialog, EmployeeReview, PayslipMappingDialog, ReviewCenter, ZeroManualReview, money
 from app.ui.presentation import text,error_text
 from app.ui.components import NavigationButton, PageHeader
 from app.ui.overview_model import OverviewViewModel, overview_action
@@ -261,6 +261,10 @@ class MainWindow(QMainWindow):
         self.review_queue_page.issue_activated.connect(self._review_issue_selected)
         self.employee_detail_page = EmployeeDetailPage()
         self.employee_detail_page.back_requested.connect(lambda: self.navigate_to(self._detail_return_page))
+        self.employee_detail_page.field_review_requested.connect(self._review_employee_field)
+        self.employee_detail_page.profile_requested.connect(self.profile_dialog)
+        self.employee_detail_page.calendar_requested.connect(self.calendar_review)
+        self.employee_detail_page.zero_review_requested.connect(self._review_employee_zeros)
         self._detail_return_page = 'overview'
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll),
@@ -348,9 +352,18 @@ class MainWindow(QMainWindow):
         self.review_queue_page.refresh(snapshot)
 
     def _review_issue_selected(self, issue):
-        if issue.employee_id and self.show_employee_detail(issue.employee_id, return_page='review'):
+        if issue.kind.startswith('SOURCE_') and issue.critical:
+            QMessageBox.information(self, 'ต้องแก้ไขไฟล์สำเนา',
+                'ข้อมูลในไฟล์ Excel ต้องได้รับการแก้ไขก่อน\nกรุณาแก้ไขไฟล์สำเนาและอ่านข้อมูลอีกครั้ง')
             return
-        self.statusBar().showMessage(f'เลือก {issue.kind}; เปิดการตัดสินใจจากรายการนี้')
+        run, draft = self.service.current(self.year.value(), self.month.value())
+        if not draft or issue.key not in {candidate.key for candidate in draft.issues}:
+            self.statusBar().showMessage('รายการตรวจสอบเปลี่ยนแล้ว กรุณาเลือกใหม่')
+            self.refresh_review_queue()
+            return
+        dialog_type = PayslipMappingDialog if issue.kind == 'PAYSLIP_MAPPING' else DecisionDialog
+        if dialog_type(self.service, draft, issue, actor=self.actor.text(), parent=self).exec() == QDialog.Accepted:
+            self._recalculate_after_review(draft)
 
     def show_employee_detail(self, employee_id, *, return_page='overview'):
         """Load evidence for the selected period; rendering has no mutation side effect."""
@@ -361,10 +374,40 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage('ไม่พบข้อมูลพนักงานสำหรับรอบที่เลือก')
             return False
         self._detail_return_page = return_page
+        self.run, self.draft = run, draft
         self.employee_detail_page.refresh(draft, employee, run)
         self.page_host.setCurrentIndex(self._page_indexes['employee_detail'])
         self.page_header.set_content('รายละเอียดพนักงาน', 'แสดงหลักฐานและยอดเงินจากฉบับร่างของรอบที่เลือก')
         return True
+
+    def _review_employee_field(self, field):
+        employee = self.employee_detail_page._employee
+        if not employee or not employee.employee_id or not self.draft:
+            return
+        issue = ReviewIssue(issue_key('FIELD', employee.employee_id, field), 'FIELD', employee.employee_id,
+                            employee.sheet, None, None, 'ยืนยันหรือแก้ไขจำนวน', field=field)
+        if DecisionDialog(self.service, self.draft, issue, actor=self.actor.text(), parent=self).exec() == QDialog.Accepted:
+            self._recalculate_after_review(self.draft)
+
+    def _review_employee_zeros(self):
+        employee = self.employee_detail_page._employee
+        if not employee or not self.draft:
+            return
+        if ZeroManualReview(self.service, self.draft, employee, actor=self.actor.text(), parent=self).exec() == QDialog.Accepted:
+            self._recalculate_after_review(self.draft)
+
+    def _recalculate_after_review(self, draft):
+        """Refresh queue only from the service result after an existing dialog persisted."""
+        year, month = draft.year, draft.month
+        def done(result):
+            if (year, month) != (self.year.value(), self.month.value()):
+                self.statusBar().showMessage('การตรวจสอบเสร็จแล้วสำหรับรอบอื่น กรุณาเลือกรอบนั้นเพื่อดูผล')
+                self.refresh_review_queue()
+                return
+            self.show_result(result)
+            self.refresh_review_queue()
+        self.work(lambda: self.service.prepare(Path(draft.source_path), Path(draft.payroll_path),
+                                               force=True, year=year, month=month), done)
 
     def _load_selected_period(self):
         """Use the persisted run for the selected period before an explicit action."""
@@ -637,6 +680,8 @@ class MainWindow(QMainWindow):
             self.review()
 
     def selected_employee(self):
+        if self.page_host.currentIndex() == self._page_indexes.get('employee_detail'):
+            return self.employee_detail_page._employee
         if not self.draft or self.table.currentRow() < 0:
             return None
         return self.draft.employees[self.table.currentRow()]
