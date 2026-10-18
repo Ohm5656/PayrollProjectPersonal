@@ -26,6 +26,8 @@ from app.ui.employee_detail_page import EmployeeDetailPage
 from app.ui.history_page import HistoryPage
 from app.ui.history_detail_page import HistoryDetailPage
 from app.ui.history_model import HistoryViewModel
+from app.ui.problems_model import ProblemsViewModel
+from app.ui.problems_page import ProblemsPage
 from app.services.payroll_service import PayrollStateError
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
@@ -69,6 +71,7 @@ class MainWindow(QMainWindow):
         self.overview_model = OverviewViewModel(service, runtime=runtime, writer=writer,
                                                  startup_service=self.startup_service)
         self.review_queue_model = ReviewQueueModel()
+        self.problems_model = ProblemsViewModel(service, runtime=runtime)
         self.draft, self.run, self.busy = None, None, False
         self.tray = getattr(QApplication.instance(), 'payroll_tray', None)
         self.pool = QThreadPool(self)
@@ -275,6 +278,7 @@ class MainWindow(QMainWindow):
         self.history_detail_page = HistoryDetailPage()
         self.history_detail_page.back_requested.connect(lambda: self.navigate_to('history'))
         self.history_detail_page.period_requested.connect(self._open_history_period)
+        self.problems_page = ProblemsPage(self.problems_model)
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll),
                               'employee_detail': self.page_host.addWidget(self.employee_detail_page),
@@ -285,7 +289,8 @@ class MainWindow(QMainWindow):
             ('problems', '', None),
             ('settings', 'เปิดหน้าตั้งค่าปัจจุบัน', self.settings),
         ):
-            page = self.review_queue_page if page_id == 'review' else self.history_page if page_id == 'history' else self._placeholder_page(page_id, action_text, action)
+            page = (self.review_queue_page if page_id == 'review' else self.history_page if page_id == 'history'
+                    else self.problems_page if page_id == 'problems' else self._placeholder_page(page_id, action_text, action))
             self._page_indexes[page_id] = self.page_host.addWidget(page)
         self.navigate_to('overview')
         self.refresh_overview()
@@ -329,6 +334,8 @@ class MainWindow(QMainWindow):
             self.refresh_review_queue()
         elif page_id == 'history':
             self.history_page.refresh()
+        elif page_id == 'problems':
+            self.problems_page.refresh()
         self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
 
     def show_legacy_workflow(self):
