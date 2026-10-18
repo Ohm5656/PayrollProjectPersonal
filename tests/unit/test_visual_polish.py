@@ -4,6 +4,8 @@ from PySide6.QtWidgets import QLabel
 from app.services.payroll_service import PayrollService
 from app.ui.components import SectionContainer, StatusBadge
 from app.ui.main_window import MainWindow
+from app.ui.overview_page import OverviewPage
+from app.ui.settings_page import SettingsPage
 from app.ui.theme import FONT_FAMILIES, stylesheet
 from tests.unit.test_ui import qt_app, draft_case
 
@@ -13,6 +15,24 @@ def test_shared_theme_keeps_thai_font_fallback_and_table_states():
     assert FONT_FAMILIES[:3] == ('Segoe UI', 'Leelawadee UI', 'Tahoma')
     assert 'QTableWidget::item:selected' in css
     assert 'QGroupBox' in css
+    assert 'QScrollArea#overviewPage' in css
+    assert 'QWidget#settingsBody' in css
+
+
+def test_overview_and_settings_scroll_surfaces_use_scoped_light_backgrounds(qt_app):
+    overview = OverviewPage()
+    settings = SettingsPage(object())
+
+    for page, page_name, viewport_name, body_name in (
+        (overview, 'overviewPage', 'overviewViewport', 'overviewBody'),
+        (settings, 'settingsPage', 'settingsViewport', 'settingsBody'),
+    ):
+        assert page.objectName() == page_name
+        assert page.viewport().objectName() == viewport_name
+        assert page.viewport().testAttribute(Qt.WA_StyledBackground)
+        assert page.widget().objectName() == body_name
+        assert page.widget().testAttribute(Qt.WA_StyledBackground)
+    overview.close(); settings.close()
 
 
 def test_status_and_long_thai_section_titles_are_accessible(qt_app):

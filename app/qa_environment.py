@@ -65,7 +65,7 @@ class QAEnvironment:
 
 class QAStartupService:
     """Inert replacement for Task Scheduler; it never reaches Windows APIs."""
-    message = 'Start with Windows is disabled in QA mode'
+    message = 'โหมดทดสอบ: ปิดการตั้งค่าเริ่มพร้อม Windows'
 
     def validate(self):
         return StartupStatus(StartupState.UNAVAILABLE, self.message)

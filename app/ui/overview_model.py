@@ -115,6 +115,8 @@ def _startup(startup_service):
         status = startup_service.validate()
     except Exception:
         return 'ERROR', 'ไม่สามารถตรวจสอบสถานะการเริ่มพร้อม Windows ได้'
+    if status.message.startswith('โหมดทดสอบ:'):
+        return str(status.state), status.message
     labels = {
         StartupState.VALID: 'เริ่มพร้อม Windows: เปิดใช้งานแล้ว',
         StartupState.NOT_INSTALLED: 'เริ่มพร้อม Windows: ปิดอยู่',

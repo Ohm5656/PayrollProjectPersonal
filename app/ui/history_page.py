@@ -1,6 +1,6 @@
 """Bounded database-backed audit history page."""
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHeaderView, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.ui.history_model import HistoryViewModel
 
@@ -34,6 +34,12 @@ class HistoryPage(QWidget):
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        header = self.table.horizontalHeader()
+        header.setMinimumSectionSize(96)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.itemDoubleClicked.connect(lambda *_: self.activate_current())
         self.table.installEventFilter(self)
         layout.addWidget(self.table, 1)
@@ -94,7 +100,6 @@ class HistoryPage(QWidget):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, event.id)
                 self.table.setItem(row, column, item)
-        self.table.resizeColumnsToContents()
         if not total:
             self.state.setText('ยังไม่มีประวัติการดำเนินการ' if not any(self.filters().values()) else 'ไม่พบประวัติตามเงื่อนไขที่เลือก')
         else:

@@ -61,9 +61,13 @@ class ReviewQueuePage(QWidget):
         self.table.itemDoubleClicked.connect(lambda *_: self.activate_current())
         layout.addWidget(self.table, 1)
 
+        self.empty_state = SectionContainer('ไม่มีรายการรอตรวจสอบ')
         self.empty = QLabel()
         self.empty.setWordWrap(True)
-        layout.addWidget(self.empty)
+        self.empty.setProperty('role', 'supporting')
+        self.empty_state.addWidget(self.empty)
+        self.empty_state.setVisible(False)
+        layout.addWidget(self.empty_state, 1)
         buttons = QHBoxLayout()
         self.open_button = QPushButton('ตรวจสอบรายการที่เลือก')
         self.open_button.setProperty('role', 'primary')
@@ -140,7 +144,9 @@ class ReviewQueuePage(QWidget):
             if item.issue.key == selected_key:
                 self.table.selectRow(row)
         has_draft = bool(self._snapshot and self._snapshot.items)
-        self.empty.setVisible(not has_draft or not self._items)
+        show_empty = not has_draft or not self._items
+        self.table.setVisible(not show_empty)
+        self.empty_state.setVisible(show_empty)
         self.open_button.setEnabled(bool(self.current_issue()))
         self.to_overview_button.setVisible(not has_draft)
         if not self._snapshot or not self._snapshot.items:

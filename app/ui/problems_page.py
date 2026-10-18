@@ -1,7 +1,7 @@
 """Embedded, bounded Problems and Recovery dashboard."""
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QPushButton,
+    QComboBox, QGridLayout, QGroupBox, QHeaderView, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -60,6 +60,13 @@ class ProblemsPage(QWidget):
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        header = self.table.horizontalHeader()
+        header.setMinimumSectionSize(96)
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table.itemDoubleClicked.connect(lambda *_: self.open_current())
         layout.addWidget(self.table, 1)
         self.scope = QLabel('แสดงเฉพาะรายการงานล่าสุดแบบจำกัดจำนวน')
@@ -97,7 +104,6 @@ class ProblemsPage(QWidget):
                 item.setData(Qt.UserRole, job.id)
                 item.setToolTip(job.detail)
                 self.table.setItem(row, column, item)
-        self.table.resizeColumnsToContents()
         if visible:
             self.scope.setText(f'แสดง {len(visible)} รายการจากงานล่าสุดที่ระบบอ่านได้')
         else:

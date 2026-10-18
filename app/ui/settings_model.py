@@ -77,6 +77,8 @@ def _monitoring(runtime, preference):
 
 
 def _startup_labels(status):
+    if status.message.startswith('โหมดทดสอบ:'):
+        return status.message
     labels = {
         StartupState.VALID: 'เปิด Start with Windows แล้ว',
         StartupState.NOT_INSTALLED: 'ปิด Start with Windows อยู่',

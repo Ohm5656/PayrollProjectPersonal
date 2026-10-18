@@ -1,7 +1,7 @@
 """Embedded Settings page; actions are intentionally owned by MainWindow."""
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QScrollArea, QVBoxLayout, QWidget,
@@ -21,8 +21,13 @@ class SettingsPage(QScrollArea):
         self.model = model
         self._saved_values = None
         self._loading = False
+        self.setObjectName('settingsPage')
         self.setWidgetResizable(True)
+        self.viewport().setObjectName('settingsViewport')
+        self.viewport().setAttribute(Qt.WA_StyledBackground, True)
         body = QWidget()
+        body.setObjectName('settingsBody')
+        body.setAttribute(Qt.WA_StyledBackground, True)
         self.setWidget(body)
         layout = QVBoxLayout(body)
         layout.setContentsMargins(0, 0, 0, 0)

@@ -60,6 +60,14 @@ QTableWidget::item {{ padding: 4px 6px; }}
 QTableWidget::item:selected {{ background: #DCEBFA; color: {t['text']}; border: 1px solid {t['primary']}; }}
 QHeaderView::section {{ background: {t['surface_subtle']}; border: 0; border-bottom: 1px solid {t['border']}; color: {t['text']}; font-weight: 600; padding: 8px; }}
 QScrollArea {{ border: 0; background: transparent; }}
+QScrollArea#overviewPage,
+QScrollArea#settingsPage,
+QWidget#overviewViewport,
+QWidget#settingsViewport,
+QWidget#overviewBody,
+QWidget#settingsBody {{
+    background: {t['canvas']};
+}}
 QScrollBar:vertical {{ background: transparent; width: 12px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {t['border']}; border-radius: 5px; min-height: 28px; }}
 QStatusBar {{ background: {t['surface']}; border-top: 1px solid {t['border']}; color: {t['text_muted']}; }}

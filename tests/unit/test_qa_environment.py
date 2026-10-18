@@ -9,6 +9,8 @@ from app.safety import SafetyError
 from app.services.automation_runtime import AutomationRuntime, RuntimeState
 from app.services.payroll_service import PayrollService
 from app.ui.main_window import MainWindow
+from app.ui.overview_model import _startup
+from app.ui.settings_model import _startup_labels
 from tests.unit.test_ui import qt_app
 
 
@@ -47,6 +49,9 @@ def test_qa_paths_startup_and_monitoring_cannot_escape_or_touch_windows(qt_app, 
 
     startup = QAStartupService()
     assert startup.validate().state.name == 'UNAVAILABLE'
+    assert startup.message == 'โหมดทดสอบ: ปิดการตั้งค่าเริ่มพร้อม Windows'
+    assert _startup(startup)[1] == startup.message
+    assert _startup_labels(startup.validate()) == startup.message
     assert not startup.install().success and not startup.remove().success and not startup.repair().success
 
     runtime = AutomationRuntime(PayrollService(repo), qt_app, qa_mode=True, qa_root=environment.root)

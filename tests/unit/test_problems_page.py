@@ -8,6 +8,7 @@ from app.ui.problems_detail_page import StagedWriteInspectionPage
 from app.excel.workbook_source import file_hash
 from tests.unit.test_ui import qt_app, draft_case
 from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QHeaderView
 
 
 def _failed_job(service, source):
@@ -111,3 +112,11 @@ def test_staged_write_page_is_read_only_and_problems_layout_is_usable_offscreen(
         assert window.problems_page.table.width() > 0
         assert window.problems_page.refresh_button.focusPolicy()
     window.close()
+
+
+def test_problems_table_stretches_detail_column(qt_app, draft_case):
+    page = ProblemsPage(ProblemsViewModel(PayrollService(draft_case[0])))
+
+    header = page.table.horizontalHeader()
+    assert header.sectionResizeMode(1) is QHeaderView.Stretch
+    assert header.minimumSectionSize() >= 96

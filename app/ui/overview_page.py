@@ -1,4 +1,5 @@
 """Modern read-only overview surface; workflow actions are wired by MainWindow."""
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from app.ui.components import SectionContainer, StatusBadge
@@ -7,8 +8,13 @@ from app.ui.components import SectionContainer, StatusBadge
 class OverviewPage(QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName('overviewPage')
         self.setWidgetResizable(True)
+        self.viewport().setObjectName('overviewViewport')
+        self.viewport().setAttribute(Qt.WA_StyledBackground, True)
         body = QWidget()
+        body.setObjectName('overviewBody')
+        body.setAttribute(Qt.WA_StyledBackground, True)
         self.setWidget(body)
         layout = QVBoxLayout(body)
         layout.setContentsMargins(0, 0, 0, 0)
