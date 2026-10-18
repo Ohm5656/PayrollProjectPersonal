@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
             self.runtime.register_shutdown_participant(self.shutdown_ui)
         self.setWindowTitle('NTP Payroll Assistant')
         self.resize(1130, 720)
+        self.setMinimumSize(860, 620)
         root = QWidget()
         self.setCentralWidget(root)
         shell = QHBoxLayout(root)
@@ -114,6 +115,7 @@ class MainWindow(QMainWindow):
 
         content = QWidget()
         content_layout = QVBoxLayout(content)
+        self._content_layout = content_layout
         content_layout.setContentsMargins(24, 20, 24, 20)
         content_layout.setSpacing(16)
         self.page_header = PageHeader()
@@ -190,6 +192,7 @@ class MainWindow(QMainWindow):
         self.table.setHorizontalHeaderLabels(['ชื่อ', 'OT', 'เบี้ยเลี้ยง', 'ค่าเดินทาง', 'เบี้ยขยัน', 'รายการพิเศษ', 'สถานะ'])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)
+        self.table.setAlternatingRowColors(True)
         self.table.cellDoubleClicked.connect(self.employee_review)
         layout.addWidget(self.table)
         actions = QHBoxLayout()
@@ -245,6 +248,7 @@ class MainWindow(QMainWindow):
                 self._placeholder_page(page_id, action_text, action)
             )
         self.navigate_to('overview')
+        self._apply_responsive_shell()
         self.statusBar().showMessage('เลือกเดือนและเตรียมสำเนาข้อมูลเพื่อเริ่มทดสอบ')
         self.update_buttons()
         if self.runtime:
@@ -280,6 +284,20 @@ class MainWindow(QMainWindow):
         title, subtitle = self.page_metadata[page_id]
         self.page_header.set_content(title, subtitle)
         self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'sidebar'):
+            self._apply_responsive_shell()
+
+    def _apply_responsive_shell(self):
+        """Keep labels readable while reserving space for legacy payroll UI."""
+        compact = self.width() < 1024
+        sidebar_width = 180 if compact else 220
+        self.sidebar.setMinimumWidth(sidebar_width)
+        self.sidebar.setMaximumWidth(sidebar_width if compact else 240)
+        margins = 12 if compact else 24
+        self._content_layout.setContentsMargins(margins, 16 if compact else 20, margins, 16 if compact else 20)
 
     def runtime_state_changed(self, state):
         messages = {'DISABLED': 'หยุดเฝ้าดูไฟล์', 'WATCHING': 'กำลังเฝ้าดูโฟลเดอร์บันทึกเวลาที่ตั้งค่าไว้',

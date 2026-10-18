@@ -53,6 +53,7 @@ QCheckBox::indicator:checked {{ background: {t['primary']}; border-color: {t['pr
 QTableWidget {{ background: {t['surface']}; alternate-background-color: {t['surface_subtle']}; border: 1px solid {t['border']}; border-radius: 8px; gridline-color: {t['border']}; selection-background-color: {t['surface_subtle']}; selection-color: {t['text']}; }}
 QHeaderView::section {{ background: {t['surface_subtle']}; border: 0; border-bottom: 1px solid {t['border']}; color: {t['text']}; font-weight: 600; padding: 8px; }}
 QScrollArea {{ border: 0; background: transparent; }}
+QStatusBar {{ background: {t['surface']}; border-top: 1px solid {t['border']}; color: {t['text_muted']}; }}
 QMenu {{ background: {t['surface']}; border: 1px solid {t['border']}; padding: 4px; }}
 QMenu::item {{ padding: 7px 24px 7px 12px; border-radius: 4px; }}
 QMenu::item:selected {{ background: {t['surface_subtle']}; }}

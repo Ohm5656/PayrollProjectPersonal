@@ -86,3 +86,20 @@ def test_compatibility_routing_does_not_resume_monitoring(qt_app, draft_case, mo
     assert runtime.watcher is None
     assert service.repo.setting('watch_enabled') is False
     window.close()
+
+
+def test_shell_keeps_navigation_readable_at_desktop_and_compact_widths(qt_app, draft_case):
+    window = MainWindow(PayrollService(draft_case[0]))
+    window.show()
+
+    window.resize(1366, 768)
+    qt_app.processEvents()
+    assert window.sidebar.minimumWidth() == 220
+    assert window.minimumWidth() == 860
+
+    window.resize(900, 700)
+    qt_app.processEvents()
+    assert window.sidebar.minimumWidth() == 180
+    assert all(button.text() for button in window.navigation_buttons.values())
+    assert all(button.focusPolicy() for button in window.navigation_buttons.values())
+    window.close()
