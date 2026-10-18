@@ -4,6 +4,7 @@ from app.services.payroll_service import PayrollService
 from app.ui.main_window import MainWindow
 from app.ui.problems_model import ProblemsViewModel
 from app.ui.problems_page import ProblemsPage
+from app.ui.problems_detail_page import StagedWriteInspectionPage
 from app.excel.workbook_source import file_hash
 from tests.unit.test_ui import qt_app, draft_case
 from PySide6.QtWidgets import QMessageBox
@@ -80,4 +81,33 @@ def test_retry_is_explicit_and_routes_only_through_runtime(qt_app, draft_case, w
 
     assert calls == [failed['id']]
     assert runtime.watcher is None
+    window.close()
+
+
+def test_changed_source_retry_result_is_not_presented_as_success(qt_app, draft_case, workbook_workspace):
+    service = PayrollService(draft_case[0])
+    failed = _failed_job(service, workbook_workspace / 'changed.xlsx')
+    runtime = AutomationRuntime(service, qt_app)
+    window = MainWindow(service, runtime=runtime)
+
+    window._retry_problem_finished(failed['id'], {'retried': False, 'changed_source_job': {'state': 'PENDING'}})
+
+    assert 'ยังไม่ได้ยืนยันว่าประมวลผลสำเร็จ' in window.statusBar().currentMessage()
+    window.close()
+
+
+def test_staged_write_page_is_read_only_and_problems_layout_is_usable_offscreen(qt_app, draft_case):
+    page = StagedWriteInspectionPage()
+    page.refresh(({'operation_id': 'synthetic', 'target_exists': False, 'backup_valid': True,
+                   'classification': 'STAGED_REQUIRES_REVIEW'},))
+    assert page.table.rowCount() == 1
+    assert 'ตรวจสอบด้วยตนเอง' in page.state.text()
+
+    window = MainWindow(PayrollService(draft_case[0]))
+    window.show(); window.navigate_to('problems')
+    for width, height in ((1366, 768), (1920, 1080), (900, 700)):
+        window.resize(width, height); qt_app.processEvents()
+        assert window.problems_page.table.isVisible()
+        assert window.problems_page.table.width() > 0
+        assert window.problems_page.refresh_button.focusPolicy()
     window.close()
