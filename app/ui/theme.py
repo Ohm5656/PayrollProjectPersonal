@@ -34,6 +34,7 @@ QWidget {{ color: {t['text']}; font-size: 14px; }}
 QLabel[role="pageTitle"] {{ font-size: 24px; font-weight: 600; }}
 QLabel[role="sectionTitle"] {{ font-size: 18px; font-weight: 600; }}
 QLabel[role="supporting"] {{ color: {t['text_muted']}; font-size: 13px; }}
+QLabel[semantic="warning"] {{ color: {t['warning']}; font-weight: 600; }}
 QWidget#sidebar {{ background: {t['surface']}; border-right: 1px solid {t['border']}; }}
 QFrame[role="section"] {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 8px; }}
 QPushButton {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 6px; padding: 8px 12px; min-height: 20px; }}

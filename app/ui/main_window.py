@@ -9,7 +9,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton, QSpinBox,
-    QApplication, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QScrollArea, QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from app.domain import FINAL_STATES, PayrollState, THAI_FIELDS, decimal_value
@@ -17,6 +17,7 @@ from app.excel.workbook_source import discover_workbooks, file_hash, filename_mo
 from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
 from app.ui.review import EmployeeReview, ReviewCenter, money
 from app.ui.presentation import text,error_text
+from app.ui.components import NavigationButton, PageHeader
 from app.services.workflow_service import WorkflowService
 
 STATE_TEXT = {'DRAFT': 'ฉบับร่าง', 'NEEDS_REVIEW': 'ต้องตรวจสอบ', 'READY': 'พร้อมยืนยัน',
@@ -71,10 +72,60 @@ class MainWindow(QMainWindow):
         self.resize(1130, 720)
         root = QWidget()
         self.setCentralWidget(root)
-        layout = QVBoxLayout(root)
-        title = QLabel('NTP Payroll Assistant')
-        title.setStyleSheet('font-size:24px; font-weight:600')
-        layout.addWidget(title)
+        shell = QHBoxLayout(root)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+
+        self.sidebar = QWidget()
+        self.sidebar.setObjectName('sidebar')
+        self.sidebar.setMinimumWidth(220)
+        self.sidebar.setMaximumWidth(240)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(12, 16, 12, 16)
+        sidebar_layout.setSpacing(8)
+        brand = QLabel('NTP Payroll')
+        brand.setProperty('role', 'sectionTitle')
+        sidebar_layout.addWidget(brand)
+        product = QLabel('Payroll Assistant')
+        product.setProperty('role', 'supporting')
+        sidebar_layout.addWidget(product)
+        sidebar_layout.addSpacing(16)
+
+        self.navigation_buttons = {}
+        self.page_metadata = {
+            'overview': ('ภาพรวม', 'พื้นที่ทำงานเงินเดือนปัจจุบัน (จะย้ายเป็น Overview เต็มรูปแบบใน Phase D.2)'),
+            'review': ('รอตรวจสอบ', 'เปิดศูนย์ตรวจสอบรายการปัจจุบัน; Review Queue เต็มรูปแบบอยู่ใน Phase D.3'),
+            'history': ('ประวัติ', 'เปิดประวัติการตรวจสอบปัจจุบัน; หน้าประวัติใหม่อยู่ใน Phase D.4'),
+            'problems': ('ปัญหาและการกู้คืน', 'สถานะและการกู้คืนเชิงลึกจะย้ายใน Phase D.5'),
+            'settings': ('ตั้งค่า', 'เปิดหน้าตั้งค่าปัจจุบัน; หน้าตั้งค่าใหม่อยู่ใน Phase D.6'),
+        }
+        for page_id, label in (('overview', 'ภาพรวม'), ('review', 'รอตรวจสอบ'), ('history', 'ประวัติ'),
+                               ('problems', 'ปัญหาและการกู้คืน'), ('settings', 'ตั้งค่า')):
+            button = NavigationButton(page_id, label, self.sidebar)
+            button.clicked.connect(lambda checked=False, target=page_id: self.navigate_to(target))
+            sidebar_layout.addWidget(button)
+            self.navigation_buttons[page_id] = button
+        sidebar_layout.addStretch()
+        tray_hint = QLabel('การเฝ้าดูไฟล์ควบคุมจากเมนู Tray')
+        tray_hint.setProperty('role', 'supporting')
+        tray_hint.setWordWrap(True)
+        sidebar_layout.addWidget(tray_hint)
+        shell.addWidget(self.sidebar)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(24, 20, 24, 20)
+        content_layout.setSpacing(16)
+        self.page_header = PageHeader()
+        content_layout.addWidget(self.page_header)
+        self.page_host = QStackedWidget()
+        content_layout.addWidget(self.page_host, 1)
+        shell.addWidget(content, 1)
+
+        self.compatibility_page = QWidget()
+        layout = QVBoxLayout(self.compatibility_page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
         self.settings_button = QPushButton('ตั้งค่าโฟลเดอร์')
         self.settings_button.clicked.connect(self.settings)
         layout.addWidget(self.settings_button)
@@ -82,7 +133,7 @@ class MainWindow(QMainWindow):
         self.month8_uat_button.clicked.connect(self.prepare_month8_uat)
         layout.addWidget(self.month8_uat_button)
         self.uat_indicator = QLabel('')
-        self.uat_indicator.setStyleSheet('font-weight:600; color:#8a4b00')
+        self.uat_indicator.setProperty('semantic', 'warning')
         layout.addWidget(self.uat_indicator)
         if self.workflow.configuration() and self.workflow.configuration().get('mode') == 'UAT_MONTH8':
             self.uat_indicator.setText('โหมดทดสอบสำเนา — งวด สิงหาคม 2569 • จ่าย 5 กันยายน 2569')
@@ -177,12 +228,57 @@ class MainWindow(QMainWindow):
             button.clicked.connect(callback)
             second.addWidget(button)
         layout.addWidget(advanced)
+
+        self.compatibility_scroll = QScrollArea()
+        self.compatibility_scroll.setWidgetResizable(True)
+        self.compatibility_scroll.setWidget(self.compatibility_page)
+        self.page_host.addWidget(self.compatibility_scroll)
+        self._page_indexes = {'overview': 0}
+        for page_id, action_text, action in (
+            ('review', 'เปิดศูนย์ตรวจสอบรายการปัจจุบัน', self.review),
+            ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
+            ('problems', '', None),
+            ('settings', 'เปิดหน้าตั้งค่าปัจจุบัน', self.settings),
+        ):
+            self._page_indexes[page_id] = self.page_host.addWidget(
+                self._placeholder_page(page_id, action_text, action)
+            )
+        self.navigate_to('overview')
         self.statusBar().showMessage('เลือกเดือนและเตรียมสำเนาข้อมูลเพื่อเริ่มทดสอบ')
         self.update_buttons()
         if self.runtime:
             self.runtime_state_changed(self.runtime.state)
             if self.runtime.last_result:
                 self.show_result(self.runtime.last_result)
+
+    def _placeholder_page(self, page_id, action_text='', action=None):
+        """Honest routing placeholder until the destination is migrated."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        message = QLabel(self.page_metadata[page_id][1])
+        message.setProperty('role', 'supporting')
+        message.setWordWrap(True)
+        layout.addWidget(message)
+        if action:
+            button = QPushButton(action_text)
+            button.setProperty('role', 'primary')
+            button.clicked.connect(action)
+            layout.addWidget(button)
+        layout.addStretch()
+        return page
+
+    def navigate_to(self, page_id):
+        """Switch presentation pages without touching runtime or payroll state."""
+        if page_id not in self._page_indexes:
+            raise ValueError(f'Unknown application page: {page_id}')
+        self.page_host.setCurrentIndex(self._page_indexes[page_id])
+        for candidate, button in self.navigation_buttons.items():
+            button.setChecked(candidate == page_id)
+        title, subtitle = self.page_metadata[page_id]
+        self.page_header.set_content(title, subtitle)
+        self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
 
     def runtime_state_changed(self, state):
         messages = {'DISABLED': 'หยุดเฝ้าดูไฟล์', 'WATCHING': 'กำลังเฝ้าดูโฟลเดอร์บันทึกเวลาที่ตั้งค่าไว้',

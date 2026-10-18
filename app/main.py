@@ -48,9 +48,11 @@ def main():
     from app.ui.tray import PayrollTray
     from app.ui.lifecycle import WindowController
     from app.ui.single_instance import SingleInstance
+    from app.ui.theme import apply_theme
     from app.services.automation_runtime import AutomationRuntime
     application = QApplication(sys.argv[:1])
     application.setApplicationName('NTP Payroll Assistant')
+    apply_theme(application)
     logger = configure_logging()
     instance=SingleInstance(application)
     try:
