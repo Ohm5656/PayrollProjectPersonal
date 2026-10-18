@@ -1060,7 +1060,13 @@ class MainWindow(QMainWindow):
         wizard = SetupWizard(self.workflow, self)
         if wizard.exec() == QDialog.Accepted:
             self.manual_recovery.setVisible(False)
-            self._resume_monitoring_after_first_setup()
+            if getattr(wizard, 'monitoring_choice_persisted', False):
+                if self.runtime and self.service.repo.setting('watch_enabled', None) is True:
+                    self.runtime.resume_monitoring()
+            else:
+                # Compatibility for a custom/older setup implementation. The
+                # shipped wizard above always persists an explicit choice.
+                self._resume_monitoring_after_first_setup()
 
     def legacy_settings(self):
         dialog = QDialog(self)

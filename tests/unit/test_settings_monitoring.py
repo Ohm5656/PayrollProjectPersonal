@@ -143,6 +143,32 @@ def test_startup_install_failure_reports_persisted_workflow_partial_change(qt_ap
     wizard.close()
 
 
+def test_first_run_persists_visible_monitoring_choice_without_overwriting_pause(qt_app):
+    class Repo:
+        def __init__(self, value=None): self.value = value
+        def setting(self, key, default=None): return self.value if key == 'watch_enabled' and self.value is not None else default
+        def set_setting(self, key, value): self.value = value
+
+    class Workflow(FakeWorkflow):
+        def __init__(self, preference=None):
+            super().__init__()
+            self.repo = Repo(preference)
+
+    workflow, startup = Workflow(), FakeStartup()
+    wizard = SetupWizard(workflow, startup_service=startup)
+    wizard.start_monitoring.setChecked(False)
+    wizard.save()
+    assert workflow.repo.value is False and wizard.monitoring_choice_persisted
+    wizard.close()
+
+    paused = Workflow(False)
+    paused_wizard = SetupWizard(paused, startup_service=FakeStartup())
+    assert not paused_wizard.start_monitoring.isEnabled()
+    paused_wizard.save()
+    assert paused.repo.value is False and not paused_wizard.monitoring_choice_persisted
+    paused_wizard.close()
+
+
 def test_settings_rejects_non_copy_paths_before_attempting_windows_startup(qt_app, workbook_workspace, tmp_path):
     service = PayrollService(Repository(Database(workbook_workspace / 'safety.db')))
     workflow, startup = WorkflowService(service), FakeStartup()

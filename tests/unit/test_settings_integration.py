@@ -10,6 +10,7 @@ from app.services.automation_runtime import AutomationRuntime, RuntimeState
 from app.services.payroll_service import PayrollService
 from app.services.windows_startup import StartupResult, StartupState, StartupStatus
 from app.ui.main_window import MainWindow
+from app.ui.tray import PayrollTray
 
 
 class FolderWatcher:
@@ -103,4 +104,17 @@ def test_failed_startup_install_reports_partial_settings_change(qt_app, workbook
     assert startup.install_calls == 1
     assert 'บันทึกโฟลเดอร์แล้ว' in window.settings_page.message.text()
     assert runtime.repo.setting('watch_enabled', None) is False and runtime.watcher is None
+    window.close()
+
+
+def test_tray_settings_opens_embedded_page_without_changing_monitoring(qt_app, workbook_workspace):
+    window, runtime = configured_window(workbook_workspace, FakeStartup())
+    runtime.repo.set_setting('watch_enabled', False)
+    tray = PayrollTray(runtime, qt_app, show_main_window=lambda _: window.show(), get_window=lambda: window)
+
+    tray.open_settings()
+
+    assert window.page_host.currentWidget() is window.settings_page
+    assert runtime.repo.setting('watch_enabled', None) is False and runtime.watcher is None
+    tray.hide()
     window.close()

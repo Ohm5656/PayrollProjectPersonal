@@ -1,4 +1,4 @@
-"""Small first-run setup dialog for the folder-based workflow."""
+"""Guided first-run setup for the copies-only folder workflow."""
 from pathlib import Path
 
 from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
@@ -12,6 +12,7 @@ class SetupWizard(QDialog):
         super().__init__(parent)
         self.workflow = workflow
         self.startup_service = startup_service or WindowsStartupService()
+        self.monitoring_choice_persisted = False
         self.setWindowTitle('ตั้งค่า NTP Payroll ครั้งแรก')
         layout = QFormLayout(self)
         layout.addRow(QLabel('เลือกโฟลเดอร์เพียงครั้งเดียว แล้วระบบจะเฝ้าดูไฟล์บันทึกเวลาในโฟลเดอร์นั้น'))
@@ -22,6 +23,14 @@ class SetupWizard(QDialog):
         self.error = QLabel('โหมดทดสอบ: การเขียนจะทำได้เฉพาะสำเนาใน test_workspace')
         self.error.setWordWrap(True)
         layout.addRow(self.error)
+        preference = getattr(getattr(workflow, 'repo', None), 'setting', lambda *_: None)('watch_enabled', None)
+        self.start_monitoring = QCheckBox('เริ่มเฝ้าดูไฟล์บันทึกเวลาหลังบันทึกการตั้งค่า')
+        self.start_monitoring.setChecked(preference is not False)
+        self.start_monitoring.setToolTip('การเริ่มพร้อม Windows และการเฝ้าดูไฟล์เป็นคนละการตั้งค่า')
+        if preference is False:
+            self.start_monitoring.setEnabled(False)
+            self.start_monitoring.setText('การเฝ้าดูไฟล์ถูกหยุดไว้ตามการตั้งค่าที่เลือกก่อนหน้า')
+        layout.addRow(QLabel('การเฝ้าดูไฟล์'), self.start_monitoring)
         self.start_with_windows = QCheckBox('เปิดโปรแกรมอัตโนมัติเมื่อเข้าสู่ Windows')
         self.startup_status = QLabel()
         self.startup_repair = QPushButton('ซ่อมแซม')
@@ -52,6 +61,12 @@ class SetupWizard(QDialog):
         except Exception as exc:
             self.error.setText(str(exc))
             return
+        # A first run may set an explicit intent, but it must never overwrite
+        # an existing pause/enable choice restored from persisted settings.
+        repo = getattr(self.workflow, 'repo', None)
+        if repo is not None and repo.setting('watch_enabled', None) is None:
+            repo.set_setting('watch_enabled', self.start_monitoring.isChecked())
+            self.monitoring_choice_persisted = True
         status = self.startup_service.validate()
         if self.start_with_windows.isChecked() and not status.enabled:
             result = self.startup_service.install()
