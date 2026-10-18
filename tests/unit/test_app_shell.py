@@ -97,11 +97,31 @@ def test_shell_keeps_navigation_readable_at_desktop_and_compact_widths(qt_app, d
     assert window.sidebar.minimumWidth() == 220
     assert window.minimumWidth() == 860
 
+    window.resize(1920, 1080)
+    qt_app.processEvents()
+    assert window.sidebar.minimumWidth() == 220
+    assert window.overview_page.primary_action.isVisible()
+    window.attendance.setText('attendance-copy.xlsx')
+    window.payroll.setText('payroll-copy.xlsx')
+    window.refresh_overview()
+    assert window.overview_page.primary_action.isEnabled()
+    window.overview_page.primary_action.setFocus()
+    qt_app.processEvents()
+    assert window.overview_page.primary_action.hasFocus()
+
     window.resize(900, 700)
     qt_app.processEvents()
     assert window.sidebar.minimumWidth() == 180
     assert all(button.text() for button in window.navigation_buttons.values())
     assert all(button.focusPolicy() for button in window.navigation_buttons.values())
+    window.close()
+
+
+def test_legacy_dashboard_cards_are_not_presented_alongside_overview(qt_app, draft_case):
+    window = MainWindow(PayrollService(draft_case[0]))
+
+    assert window._legacy_cards.isHidden()
+    assert window._legacy_cards.parentWidget() is window.compatibility_page
     window.close()
 
 

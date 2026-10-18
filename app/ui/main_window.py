@@ -184,7 +184,9 @@ class MainWindow(QMainWindow):
         manual_layout.addLayout(sources)
         self.manual_recovery.setVisible(not self.workflow.configured())
         layout.addWidget(self.manual_recovery)
-        cards = QGridLayout()
+        self._legacy_cards = QWidget()
+        self._legacy_cards.setVisible(False)
+        cards = QGridLayout(self._legacy_cards)
         self.cards = {}
         for index, (key, text) in enumerate([('attendance', 'ข้อมูลเวลา'), ('save', 'บันทึกไฟล์ล่าสุด'),
             ('employees', 'พนักงาน'), ('issues', 'รายการที่ต้องตรวจสอบ'), ('state', 'สถานะเงินเดือน')]):
@@ -195,7 +197,9 @@ class MainWindow(QMainWindow):
             box_layout.addWidget(value)
             cards.addWidget(box, 0, index)
             self.cards[key] = value
-        layout.addLayout(cards)
+        # These values remain as compatibility state for existing handlers.
+        # The Overview is the sole visible dashboard presentation in Phase D.2.
+        layout.addWidget(self._legacy_cards)
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(['ชื่อพนักงาน', 'OT ปกติ (ชม.)', 'OT วันหยุด (ชม.)', 'เบี้ยเลี้ยง', 'ค่าเดินทาง', 'เบี้ยขยัน', 'รายการพิเศษ (จำนวน)', 'สถานะ'])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
