@@ -8,6 +8,8 @@ from app.excel.workbook_source import discover_workbooks, file_hash
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_ROOT = ROOT / 'reference_data'
 TEST_ROOT = ROOT / 'test_workspace'
+MASTER_TEMPLATE_RELATIVE = 'template/ฟอร์มเปล่ารายเดือน.xlsx'
+EXPECTED_REFERENCE_WORKBOOKS = 19
 
 
 class SafetyError(RuntimeError):
@@ -37,11 +39,27 @@ def source_manifest():
 
 def record_baseline(path: Path):
     current = source_manifest()
-    if len(current) != 18:
-        raise SafetyError(f'Expected 18 source workbooks, found {len(current)}')
+    if len(current) != EXPECTED_REFERENCE_WORKBOOKS:
+        raise SafetyError(f'Expected {EXPECTED_REFERENCE_WORKBOOKS} source workbooks, found {len(current)}')
     path = Path(path)
     if path.exists():
         baseline = json.loads(path.read_text(encoding='utf-8'))
+        # The user deliberately introduced the one immutable monthly master after
+        # the 18-file historical baseline was recorded.  Upgrade only if every
+        # old source remains byte-for-byte and timestamp-for-timestamp intact,
+        # and the sole addition is the declared master template.
+        previous = baseline.get('files', {})
+        additions = set(current) - set(previous)
+        if (additions == {MASTER_TEMPLATE_RELATIVE}
+                and all(current.get(name) == evidence for name, evidence in previous.items())):
+            baseline = {
+                **baseline,
+                'recorded_at_utc': datetime.now(timezone.utc).isoformat(),
+                'files': current,
+                'baseline_note': 'Added declared read-only monthly master after verifying all original 18 sources unchanged.',
+            }
+            path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+            return baseline
         verify_baseline(baseline)
         return baseline
     baseline = {'recorded_at_utc': datetime.now(timezone.utc).isoformat(), 'files': current}

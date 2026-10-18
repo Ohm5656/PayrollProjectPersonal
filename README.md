@@ -48,3 +48,19 @@ python -X utf8 -m app.main --smoke-test
 ```
 
 Excel integration tests require Microsoft Excel and use test-workspace copies. The application is configured for copies-only workflows; do not use it to modify production payroll files.
+
+## Windows sign-in startup (manual verification)
+
+Windows startup is opt-in. In **Settings**, select **Start with Windows** and save; this creates one current-user Task Scheduler task named `NTP Payroll Assistant`. It launches the project virtual environment's absolute `pythonw.exe` path with `-X utf8 -m app.main --startup`, so no console window is expected.
+
+Do not run these steps as part of automated testing. Perform them manually on a safe copies-only configuration:
+
+1. Configure approved test-workspace folders and enable monitoring only if that is desired.
+2. In Settings, enable Start with Windows and confirm the status reads enabled.
+3. In PowerShell, inspect the task: `Get-ScheduledTask -TaskName 'NTP Payroll Assistant'`.
+4. Check its action executable, arguments, working directory, logon trigger, Interactive logon type, and Limited run level in Task Scheduler.
+5. Start it manually with `Start-ScheduledTask -TaskName 'NTP Payroll Assistant'`; confirm a tray icon appears, no main window appears, and no console appears.
+6. Confirm the tray status reflects the persisted monitoring preference; open the main window manually from the tray if needed.
+7. Exit from the tray. Verify the process ends while the Scheduled Task remains installed.
+8. Sign out and sign in manually to verify the logon trigger. Do not force logoff/restart from the application.
+9. Disable Start with Windows in Settings and confirm the task is removed. A broken task may be repaired explicitly with the Settings **Repair** button.

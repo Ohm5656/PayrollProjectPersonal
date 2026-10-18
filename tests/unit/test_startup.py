@@ -14,4 +14,5 @@ def test_startup_scripts_parse_without_installing_any_task():
         assert result.returncode == 0, result.stdout + result.stderr
     text = scripts[0].read_text(encoding='utf-8')
     assert '-RunLevel Limited' in text and '-LogonType Interactive' in text
+    assert "NTP Payroll Assistant" in text and '-X utf8 -m app.main --startup' in text
     assert 'Start-ScheduledTask' not in text

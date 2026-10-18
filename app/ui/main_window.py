@@ -9,7 +9,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton, QSpinBox,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from app.domain import FINAL_STATES, PayrollState, THAI_FIELDS, decimal_value
@@ -17,6 +17,7 @@ from app.excel.workbook_source import discover_workbooks, file_hash, filename_mo
 from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
 from app.ui.review import EmployeeReview, ReviewCenter, money
 from app.ui.presentation import text,error_text
+from app.services.workflow_service import WorkflowService
 
 STATE_TEXT = {'DRAFT': 'ฉบับร่าง', 'NEEDS_REVIEW': 'ต้องตรวจสอบ', 'READY': 'พร้อมยืนยัน',
               'CONFIRMED': 'ยืนยันเงินเดือนแล้ว', 'WRITTEN': 'บันทึกลง Excel แล้ว', 'LOCKED': 'ปิดรอบเดือนแล้ว'}
@@ -48,17 +49,24 @@ class MainWindow(QMainWindow):
     watched_result = Signal(object)
     watched_error = Signal(str)
 
-    def __init__(self, service, *, writer=None, parent=None):
+    def __init__(self, service, *, writer=None, runtime=None, parent=None):
         super().__init__(parent)
         self.service, self.writer = service, writer
-        self.draft, self.run, self.busy, self.tray = None, None, False, None
-        self.watcher = None
+        self.runtime = runtime
+        self.workflow = runtime.workflow if runtime else WorkflowService(service)
+        self.draft, self.run, self.busy = None, None, False
+        self.tray = getattr(QApplication.instance(), 'payroll_tray', None)
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
         self.jobs = []
         self.exit_pending = False
         self.watched_result.connect(self.receive_watched_result)
         self.watched_error.connect(self.receive_watched_error)
+        if self.runtime:
+            self.runtime.state_changed.connect(self.runtime_state_changed)
+            self.runtime.processing_finished.connect(self.receive_watched_result)
+            self.runtime.runtime_error.connect(self.receive_watched_error)
+            self.runtime.register_shutdown_participant(self.shutdown_ui)
         self.setWindowTitle('NTP Payroll Assistant')
         self.resize(1130, 720)
         root = QWidget()
@@ -67,6 +75,17 @@ class MainWindow(QMainWindow):
         title = QLabel('NTP Payroll Assistant')
         title.setStyleSheet('font-size:24px; font-weight:600')
         layout.addWidget(title)
+        self.settings_button = QPushButton('ตั้งค่าโฟลเดอร์')
+        self.settings_button.clicked.connect(self.settings)
+        layout.addWidget(self.settings_button)
+        self.month8_uat_button = QPushButton('เตรียมทดสอบเดือน 8 (สำเนา)')
+        self.month8_uat_button.clicked.connect(self.prepare_month8_uat)
+        layout.addWidget(self.month8_uat_button)
+        self.uat_indicator = QLabel('')
+        self.uat_indicator.setStyleSheet('font-weight:600; color:#8a4b00')
+        layout.addWidget(self.uat_indicator)
+        if self.workflow.configuration() and self.workflow.configuration().get('mode') == 'UAT_MONTH8':
+            self.uat_indicator.setText('โหมดทดสอบสำเนา — งวด สิงหาคม 2569 • จ่าย 5 กันยายน 2569')
         layout.addWidget(QLabel('โหมดทดสอบ — เตรียมและบันทึกข้อมูลลงไฟล์สำเนาเท่านั้น'))
         layout.addWidget(QLabel('เริ่มต้น: 1 เลือกเดือน  •  2 เลือกปี  •  3 เลือกไฟล์บันทึกเวลา  •  4 เลือกไฟล์เงินเดือน  •  5 อ่านข้อมูล'))
         now = datetime.now(timezone(timedelta(hours=7)))
@@ -87,7 +106,6 @@ class MainWindow(QMainWindow):
         self.copy_button = QPushButton('เตรียมสำเนาข้อมูลเดือนที่เลือก')
         self.copy_button.clicked.connect(self.prepare_copies)
         period.addWidget(self.copy_button)
-        layout.addLayout(period)
         sources = QFormLayout()
         self.attendance = QLineEdit(service.repo.setting('attendance_path', ''))
         self.payroll = QLineEdit(service.repo.setting('payroll_path', ''))
@@ -99,7 +117,12 @@ class MainWindow(QMainWindow):
             browse.clicked.connect(lambda checked=False, k=key: self.choose_file(k))
             row.addWidget(browse)
             sources.addRow(label_text, row)
-        layout.addLayout(sources)
+        self.manual_recovery = QGroupBox('เลือกไฟล์เอง (กู้คืน/ทดสอบขั้นสูง)')
+        manual_layout = QVBoxLayout(self.manual_recovery)
+        manual_layout.addLayout(period)
+        manual_layout.addLayout(sources)
+        self.manual_recovery.setVisible(not self.workflow.configured())
+        layout.addWidget(self.manual_recovery)
         cards = QGridLayout()
         self.cards = {}
         for index, (key, text) in enumerate([('attendance', 'ข้อมูลเวลา'), ('save', 'บันทึกไฟล์ล่าสุด'),
@@ -149,50 +172,41 @@ class MainWindow(QMainWindow):
                                ('ปฏิทินวันทำงาน', self.calendar_review),
                                ('เปิดรอบเดือนที่ยืนยันแล้วใหม่', self.reopen), ('ปิดรอบเดือน', self.lock)]:
             button = QPushButton(text)
+            if callback == self.single_employee_test:
+                self.single_test_button = button
             button.clicked.connect(callback)
             second.addWidget(button)
         layout.addWidget(advanced)
         self.statusBar().showMessage('เลือกเดือนและเตรียมสำเนาข้อมูลเพื่อเริ่มทดสอบ')
         self.update_buttons()
+        if self.runtime:
+            self.runtime_state_changed(self.runtime.state)
+            if self.runtime.last_result:
+                self.show_result(self.runtime.last_result)
 
-    def configure_watcher(self):
-        if self.watcher:
-            if not self.watcher.stop():
-                self.statusBar().showMessage('กำลังรอการอ่านไฟล์ครั้งก่อนให้เสร็จ')
-                return
-            self.watcher = None
-        if not self.service.repo.setting('watch_enabled', False) or not self.attendance.text() or not self.payroll.text():
-            return
-        from app.services.watcher import AttendanceWatcher
-        try:
-            path = development_target(Path(self.attendance.text()))
-            payroll = development_target(Path(self.payroll.text()))
-            year, month = self.year.value(), self.month.value()
-            initial = self.run['source_hash'] if self.run and self.run['source_path'] == str(path) and self.run['payroll_path'] == str(payroll) else None
-            self.watcher = AttendanceWatcher(path,
-                lambda p: self.service.prepare(p, payroll, year=year, month=month),
-                initial_hash=initial, on_result=self.watched_result.emit, notify=self.watched_error.emit)
-            self.watcher.start()
-        except Exception as exc:
-            self.receive_watched_error(str(exc))
+    def runtime_state_changed(self, state):
+        messages = {'DISABLED': 'หยุดเฝ้าดูไฟล์', 'WATCHING': 'กำลังเฝ้าดูโฟลเดอร์บันทึกเวลาที่ตั้งค่าไว้',
+                    'PROCESSING': 'กำลังอ่านและตรวจสอบไฟล์บันทึกเวลา', 'REVIEW_REQUIRED': 'มีรายการที่ต้องตรวจสอบ',
+                    'ERROR': 'เกิดข้อผิดพลาดในการทำงานอัตโนมัติ'}
+        self.state_changed.emit(str(state).lower())
+        self.statusBar().showMessage(messages.get(str(state), str(state)))
 
     def receive_watched_result(self, result):
-        if Path(result['draft'].source_path) != Path(self.attendance.text()): return
-        if Path(result['draft'].payroll_path) != Path(self.payroll.text()): return
+        if not self.workflow.configured() and Path(result['draft'].source_path) != Path(self.attendance.text()): return
+        if not self.workflow.configured() and Path(result['draft'].payroll_path) != Path(self.payroll.text()): return
         # Refresh current persisted revision, since a manual job may have
         # completed after the watcher result was queued on the GUI thread.
         result = dict(result)
         result['run'], result['draft'] = self.service.current(result['draft'].year, result['draft'].month)
         self.show_result(result)
-        if not result.get('unchanged') and not result.get('difference'):
-            self.notify.emit('อ่านบันทึกเวลาที่บันทึกแล้ว', 'ฉบับร่างพร้อมตรวจสอบ')
-        if self.exit_pending and not self.busy: self.exit_when_idle.emit()
+        if self.exit_pending and not self.busy:
+            self._notify_shutdown_ready()
 
     def receive_watched_error(self, message):
         self.state_changed.emit('error')
         self.statusBar().showMessage(message)
-        self.notify.emit('อ่านบันทึกเวลาไม่สำเร็จ', message)
-        if self.exit_pending and not self.busy: self.exit_when_idle.emit()
+        if self.exit_pending and not self.busy:
+            self._notify_shutdown_ready()
 
     def update_buttons(self):
         state = self.run['state'] if self.run else None
@@ -205,12 +219,24 @@ class MainWindow(QMainWindow):
         self.slips_button.setEnabled(bool(self.draft) and not self.busy)
         self.month.setEnabled(not self.busy)
         self.year.setEnabled(not self.busy)
+        if self.workflow.configuration() and self.workflow.configuration().get('mode') == 'UAT_MONTH8':
+            self.single_test_button.setText('ทดสอบพนักงานที่เลือก (UAT เดือน 8)')
 
     def clear_source_selection(self):
         self.run,self.draft=None,None
         self.table.setRowCount(0)
         for card in self.cards.values(): card.setText('—')
         self.update_buttons()
+
+    def prepare_month8_uat(self):
+        from app.services.month8_uat import prepare_month8_uat
+        def done(result):
+            self.manual_recovery.setVisible(False)
+            self.uat_indicator.setText('โหมดทดสอบสำเนา — เดือน 8 / 2569')
+            if self.runtime:
+                self.runtime.resume_monitoring()
+            self.statusBar().showMessage('โหมดทดสอบสำเนา — เดือน 8 / 2569: เปิดไฟล์ attendance แล้วกด Save')
+        self.work(lambda: prepare_month8_uat(self.workflow), done)
 
     def work(self, task, success):
         if self.busy:
@@ -226,16 +252,19 @@ class MainWindow(QMainWindow):
             success(result)
             self.update_buttons()
             if self.exit_pending:
-                self.exit_when_idle.emit()
+                self._notify_shutdown_ready()
         def failed(message):
             self.busy = False
             self.jobs.remove(job)
             self.update_buttons()
             self.state_changed.emit('error')
             self.statusBar().showMessage(error_text(message))
-            self.notify.emit('ดำเนินการไม่สำเร็จ', error_text(message))
+            if self.runtime:
+                self.runtime.notification.emit('ดำเนินการไม่สำเร็จ', error_text(message))
+            else:
+                self.notify.emit('ดำเนินการไม่สำเร็จ', error_text(message))
             if self.exit_pending:
-                self.exit_when_idle.emit()
+                self._notify_shutdown_ready()
         job.signals.finished.connect(done)
         job.signals.failed.connect(failed)
         self.pool.start(job)
@@ -253,7 +282,16 @@ class MainWindow(QMainWindow):
         getattr(self, key).setText(path)
         self.service.repo.set_setting(key + '_path', path)
         self.clear_source_selection()
-        self.configure_watcher()
+        self.update_manual_runtime_sources()
+
+    def update_manual_runtime_sources(self):
+        if not self.runtime or not self.attendance.text() or not self.payroll.text():
+            return
+        try:
+            self.runtime.configure_manual_sources(self.attendance.text(), self.payroll.text(),
+                                                  self.year.value(), self.month.value())
+        except Exception as exc:
+            self.receive_watched_error(str(exc))
 
     def prepare_copies(self):
         month = self.month.value()
@@ -277,7 +315,7 @@ class MainWindow(QMainWindow):
                 self.service.repo.set_setting(kind + '_path', path)
             self.clear_source_selection()
             self.statusBar().showMessage('เตรียมสำเนาแล้ว กดอ่านข้อมูลเพื่อเริ่มตรวจสอบ')
-            self.configure_watcher()
+            self.update_manual_runtime_sources()
         self.work(copy, loaded)
 
     def read_draft(self):
@@ -291,6 +329,8 @@ class MainWindow(QMainWindow):
 
     def show_result(self, result):
         self.run, self.draft = result['run'], result['draft']
+        if self.runtime:
+            self.runtime.review_resolved(self.run)
         self.render()
         if result.get('difference'):
             self.notify.emit('พบการแก้ไขบันทึกเวลาหลังยืนยันเงินเดือน', 'เดือนที่ยืนยันแล้วคงข้อมูลเดิม กรุณาดูส่วนต่างก่อนเปิดเดือนใหม่')
@@ -504,6 +544,29 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def settings(self):
+        from app.ui.setup_wizard import SetupWizard
+        wizard = SetupWizard(self.workflow, self)
+        if wizard.exec() == QDialog.Accepted:
+            self.manual_recovery.setVisible(False)
+            if self.runtime:
+                self.runtime.resume_monitoring()
+        return
+
+    def first_run_setup(self):
+        """Show setup only on an interactive first launch, never in Qt tests."""
+        if self.workflow.configured():
+            return
+        from PySide6.QtWidgets import QApplication
+        if QApplication.instance() and QApplication.instance().platformName() in {'offscreen', 'minimal'}:
+            return
+        from app.ui.setup_wizard import SetupWizard
+        wizard = SetupWizard(self.workflow, self)
+        if wizard.exec() == QDialog.Accepted:
+            self.manual_recovery.setVisible(False)
+            if self.runtime:
+                self.runtime.resume_monitoring()
+
+    def legacy_settings(self):
         dialog = QDialog(self)
         dialog.setWindowTitle('ตั้งค่า')
         layout = QFormLayout(dialog)
@@ -516,9 +579,10 @@ class MainWindow(QMainWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addRow(buttons)
         if dialog.exec() == QDialog.Accepted:
-            self.service.repo.set_setting('watch_enabled', start.isChecked())
-            if hasattr(self, 'configure_watcher'):
-                self.configure_watcher()
+            if self.runtime:
+                (self.runtime.resume_monitoring if start.isChecked() else self.runtime.pause_monitoring)()
+            else:
+                self.service.repo.set_setting('watch_enabled', start.isChecked())
 
     def open_copy(self, kind):
         path = Path(getattr(self, kind).text())
@@ -535,17 +599,27 @@ class MainWindow(QMainWindow):
             self.hide()
             event.ignore()
         else:
-            if self.shutdown(): event.accept()
+            if self.runtime:
+                stopped = self.runtime.shutdown()
+            else:
+                stopped = self.shutdown_ui()
+            if stopped: event.accept()
             else: event.ignore()
 
     def shutdown(self):
-        if self.watcher:
-            if not self.watcher.stop():
-                self.exit_pending = True
-                return False
+        """Compatibility wrapper; watcher shutdown belongs to AutomationRuntime."""
+        return self.shutdown_ui()
+
+    def shutdown_ui(self):
         if self.busy:
             self.exit_pending = True
             self.statusBar().showMessage('กำลังรอการดำเนินการให้เสร็จก่อนออก')
             return False
         self.pool.waitForDone(30000)
         return True
+
+    def _notify_shutdown_ready(self):
+        if self.runtime:
+            self.runtime.notify_shutdown_ready()
+        else:
+            self.exit_when_idle.emit()

@@ -33,6 +33,31 @@ class Repository:
     def employees(self):
         return self.db.query('SELECT * FROM employees ORDER BY canonical_name')
 
+    def end_employee(self, eid, last_year, last_month, *, reason, actor='user'):
+        """End employment after an explicitly confirmed payroll period.
+
+        Historical payroll stays readable; later attendance is surfaced for
+        review instead of silently being paid or erased.
+        """
+        if not self.db.query('SELECT id FROM employees WHERE id=?', (eid,)):
+            raise ValueError('Unknown employee')
+        if not isinstance(last_year, int) or not isinstance(last_month, int) or not 1 <= last_month <= 12:
+            raise ValueError('Invalid final employment period')
+        if not reason or not reason.strip():
+            raise ValueError('A reason is required to end an employee')
+        with self.db.transaction() as con:
+            old = con.execute('SELECT * FROM employee_endings WHERE employee_id=?', (eid,)).fetchone()
+            con.execute('INSERT INTO employee_endings VALUES (?,?,?,?,?,?) ON CONFLICT(employee_id) DO UPDATE SET '
+                        'last_year=excluded.last_year,last_month=excluded.last_month,reason=excluded.reason,'
+                        'confirmed_by=excluded.confirmed_by,confirmed_at=excluded.confirmed_at',
+                        (eid, last_year, last_month, reason.strip(), actor, utc_now()))
+            self.audit(con, 'EMPLOYEE_END_CONFIRMED', employee_id=eid, year=last_year, month=last_month,
+                       old=dict(old) if old else None, new={'last_year': last_year, 'last_month': last_month, 'reason': reason}, actor=actor)
+
+    def active_for_period(self, eid, year, month):
+        ending = self.db.query('SELECT last_year,last_month FROM employee_endings WHERE employee_id=?', (eid,))
+        return not ending or (year, month) <= (ending[0]['last_year'], ending[0]['last_month'])
+
     def confirm_alias(self, eid, alias, source, *, actor, reason):
         if not actor.strip() or not reason.strip() or not normalized_name(alias):
             raise ValueError('Explicit actor, alias and reason are required')
@@ -142,6 +167,54 @@ class Repository:
     def remembered(self, eid, field, day):
         rows = self.db.query('SELECT * FROM remembered_values WHERE employee_id=? AND field_key=? AND valid_from<=? '
                              'AND (valid_to IS NULL OR valid_to>=?) ORDER BY valid_from DESC LIMIT 1', (eid, field, day, day))
+        return rows[0] if rows else None
+
+    def set_recurring_value(self, eid, field, value, year, month, *, apply='FROM_THIS_MONTH', reason, actor='user'):
+        """Store an explicit effective-dated recurring value without rewriting history.
+
+        ``CURRENT_MONTH`` is a one-month exception. ``FROM_THIS_MONTH`` closes
+        the previously active forward value on the prior month and starts a new
+        one.  Both choices are auditable and need a human reason.
+        """
+        if not self.db.query('SELECT id FROM employees WHERE id=?', (eid,)):
+            raise ValueError('Unknown employee')
+        if not isinstance(year, int) or not isinstance(month, int) or not 1 <= month <= 12:
+            raise ValueError('Invalid effective payroll period')
+        if not reason or not reason.strip():
+            raise ValueError('A reason is required for a recurring-value change')
+        amount = decimal_value(value)
+        if amount is None:
+            raise ValueError('Recurring value must be numeric')
+        apply = str(apply).upper()
+        if apply not in {'CURRENT_MONTH', 'FROM_THIS_MONTH'}:
+            raise ValueError('apply must be CURRENT_MONTH or FROM_THIS_MONTH')
+        start = date(year, month, 1)
+        end = date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+        end = end.fromordinal(end.toordinal() - 1)
+        with self.db.transaction() as con:
+            old = [dict(row) for row in con.execute('SELECT * FROM recurring_value_effective WHERE employee_id=? AND field_key=?', (eid, field))]
+            if apply == 'FROM_THIS_MONTH':
+                prior_end = start.fromordinal(start.toordinal() - 1).isoformat()
+                con.execute("UPDATE recurring_value_effective SET effective_to=? WHERE employee_id=? AND field_key=? "
+                            "AND scope='FROM_THIS_MONTH' AND effective_from<? AND (effective_to IS NULL OR effective_to>=?)",
+                            (prior_end, eid, field, start.isoformat(), start.isoformat()))
+                valid_to = None
+            else:
+                valid_to = end.isoformat()
+            con.execute('INSERT INTO recurring_value_effective VALUES (?,?,?,?,?,?,?,?,?) '
+                        'ON CONFLICT(employee_id,field_key,effective_from,scope) DO UPDATE SET '
+                        'value=excluded.value,effective_to=excluded.effective_to,reason=excluded.reason,confirmed_by=excluded.confirmed_by,created_at=excluded.created_at',
+                        (eid, field, str(amount), start.isoformat(), valid_to, apply, reason.strip(), actor, utc_now()))
+            self.audit(con, 'RECURRING_VALUE_EFFECTIVE', employee_id=eid, year=year, month=month,
+                       old=old, new={'field': field, 'value': str(amount), 'apply': apply,
+                                     'effective_from': start.isoformat(), 'effective_to': valid_to, 'reason': reason}, actor=actor)
+
+    def recurring_value(self, eid, field, year, month):
+        day = date(year, month, 1).isoformat()
+        rows = self.db.query('SELECT * FROM recurring_value_effective WHERE employee_id=? AND field_key=? '
+                             'AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) '
+                             "ORDER BY CASE scope WHEN 'CURRENT_MONTH' THEN 0 ELSE 1 END, effective_from DESC LIMIT 1",
+                             (eid, field, day, day))
         return rows[0] if rows else None
 
     def previous_value(self, eid, field, year, month):

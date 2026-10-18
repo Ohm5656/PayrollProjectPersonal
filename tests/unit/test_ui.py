@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QTableWidget, QSystemTrayIc
 
 from app.domain import ReviewIssue, issue_key
 from app.services.payroll_service import PayrollService
+from app.services.automation_runtime import AutomationRuntime, RuntimeState
 from app.ui.main_window import MainWindow
 from app.ui.review import DecisionDialog, EmployeeReview, ReviewCenter
 from app.ui.review import ZeroManualReview
@@ -147,14 +148,15 @@ def test_review_center_groups_and_diff_evidence(qt_app, draft_case):
 
 
 def test_tray_actions_states_and_close_to_tray(qt_app, draft_case):
-    window = MainWindow(PayrollService(draft_case[0]))
-    tray = PayrollTray(window, qt_app)
+    runtime = AutomationRuntime(PayrollService(draft_case[0]), qt_app)
+    window = MainWindow(runtime.service, runtime=runtime)
+    tray = PayrollTray(runtime, qt_app, show_main_window=lambda _: window.show(), get_window=lambda: window)
     window.tray = tray
     actions = [a.text() for a in tray.contextMenu().actions()]
-    assert 'เปิด NTP Payroll Assistant' in actions and 'ออก' in actions
-    tray.state('error')
+    assert {'เปิด NTP Payroll Assistant', 'หยุดเฝ้าดูชั่วคราว', 'เริ่มเฝ้าดูอีกครั้ง', 'ออก'} <= set(actions)
+    tray.state(RuntimeState.ERROR)
     assert 'ข้อผิดพลาด' in tray.toolTip()
-    tray.state('review')
+    tray.state(RuntimeState.REVIEW_REQUIRED)
     assert 'ต้องตรวจสอบ' in tray.toolTip()
     assert window.shutdown()
     tray.hide()

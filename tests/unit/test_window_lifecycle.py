@@ -10,6 +10,7 @@ from app.ui.tray import PayrollTray
 from app.ui.presentation import text
 from tests.unit.test_ui import qt_app,draft_case
 from app.services.payroll_service import PayrollService
+from app.services.automation_runtime import AutomationRuntime
 from app.ui.main_window import MainWindow
 
 
@@ -54,9 +55,10 @@ def test_worker_restore_is_queued_to_gui_thread(qt_app):
 
 
 def test_tray_open_click_double_and_clean_exit_use_authoritative_restore(qt_app,draft_case,monkeypatch):
-    window=MainWindow(PayrollService(draft_case[0]))
+    runtime=AutomationRuntime(PayrollService(draft_case[0]),qt_app)
+    window=MainWindow(runtime.service,runtime=runtime)
     reasons=[];exits=[]
-    tray=PayrollTray(window,qt_app,show_main_window=reasons.append)
+    tray=PayrollTray(runtime,qt_app,show_main_window=reasons.append,get_window=lambda:window)
     next(a for a in tray.contextMenu().actions() if a.text()=='เปิด NTP Payroll Assistant').trigger()
     tray.activated.emit(QSystemTrayIcon.DoubleClick)
     tray.activated.emit(QSystemTrayIcon.Trigger)
@@ -86,13 +88,43 @@ def test_single_instance_sends_restore_and_releases_lock(qt_app,workbook_workspa
     while child.poll() is None and monotonic()<end:
         qt_app.processEvents();sleep(.01)
     try:
-        stdout,stderr=child.communicate(timeout=2)
+        # A clean isolated child was measured at about 2.57 seconds on this
+        # Windows host. Eight seconds remains bounded but allows normal Qt
+        # process startup and pipe teardown under a busy full suite.
+        stdout,stderr=child.communicate(timeout=8)
         assert child.returncode==0,(stdout,stderr)
         assert requested==[True]
-    finally:first.close()
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            try: child.wait(timeout=3)
+            except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
+        first.close()
+        qt_app.processEvents()
     fresh=SingleInstance(qt_app,directory=workbook_workspace)
     assert fresh.acquire_or_notify()
     fresh.close()
+
+
+def test_duplicate_startup_launch_probes_silently_without_restoring_window(qt_app,workbook_workspace):
+    import subprocess,sys
+    first=SingleInstance(qt_app,directory=workbook_workspace)
+    assert first.acquire_or_notify()
+    requested=[]
+    first.show_requested.connect(lambda:requested.append(True))
+    code='from PySide6.QtCore import QCoreApplication; from pathlib import Path; import sys; from app.ui.single_instance import SingleInstance; app=QCoreApplication([]); owner=SingleInstance(app,directory=Path(sys.argv[1])); primary=owner.acquire_or_notify(show_existing=False); owner.close(); sys.exit(9 if primary else 0)'
+    child=subprocess.Popen([sys.executable,'-c',code,str(workbook_workspace)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    end=monotonic()+8
+    while child.poll() is None and monotonic()<end:
+        qt_app.processEvents();sleep(.01)
+    try:
+        stdout,stderr=child.communicate(timeout=8)
+        assert child.returncode==0,(stdout,stderr)
+        assert requested==[]
+    finally:
+        if child.poll() is None:
+            child.terminate(); child.wait(timeout=3)
+        first.close(); qt_app.processEvents()
 
 
 @pytest.mark.parametrize('value,expected',[('UNKNOWN_RULE','ยังไม่มีเงื่อนไขที่ยืนยัน'),('AUTO_REUSE','ใช้ค่าประจำเดิม'),

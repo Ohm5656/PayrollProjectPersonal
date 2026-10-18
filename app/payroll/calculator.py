@@ -33,7 +33,8 @@ class DraftCalculator:
         for person in payroll.employees:
             eid = self.repo.resolve(person.name, 'payroll_full')
             if eid:
-                payroll_people[eid] = person
+                if self.repo.active_for_period(eid, attendance.year, attendance.month):
+                    payroll_people[eid] = person
             else:
                 globals_.append(ReviewIssue(issue_key('UNKNOWN_PAYROLL_EMPLOYEE', person.name), 'UNKNOWN_PAYROLL_EMPLOYEE',
                     None, payroll.sheet_name, None, None, 'ต้องสร้างหรือจับคู่พนักงานในไฟล์เงินเดือน', person.name))
@@ -115,10 +116,13 @@ class DraftCalculator:
         for field in sorted((set(payroll_person.cells) & OUTPUT_FIELDS) - {'travel', 'allowance', 'bonus', 'normal_ot', 'holiday_ot', 'holiday_days'}):
             source = payroll_person.cells[field].value
             if field in RECURRING_FIELDS:
+                effective = self.repo.recurring_value(eid, field, attendance.year, attendance.month)
                 remembered = self.repo.remembered(eid, field, period)
                 configured = {'base': 'base_salary', 'phone': 'phone_allowance', 'position': 'position_allowance', 'housing': 'housing'}[field]
                 draft, reason = None, 'Previous month is a suggestion only'
-                if remembered and remembered['reuse_policy'] == ReusePolicy.AUTO_REUSE:
+                if effective:
+                    draft, reason = decimal_value(effective['value']), 'Explicit effective-dated recurring value'
+                elif remembered and remembered['reuse_policy'] == ReusePolicy.AUTO_REUSE:
                     draft, reason = decimal_value(remembered['value']), 'Explicit AUTO_REUSE policy'
                 elif profile.get('confirmed') and profile.get(configured) is not None:
                     draft, reason = decimal_value(profile[configured]), 'Confirmed employee recurring profile'

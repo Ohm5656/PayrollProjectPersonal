@@ -59,7 +59,7 @@ def final_report(junit, log_path, smoke_path, followups=None):
         'Main suite: 155 passed; UI/source follow-up: 31 passed; final COM follow-up: 4 passed. These are 190 executed cases and 159 unique acceptance cases.',
         'The Phase 3–5 gate was executed before Phase 6: 104 passed, with checkpoint in `reports/phase_3_5_validation.md`.', '',
         '## SOURCE FILE HASH CHECK', '',
-        f'{len(hashes)} / 18 reference workbooks exactly match original SHA-256, file size, modification time and inventory. No reference workbook was saved.',
+        f'{len(hashes)} / {len(baseline["files"])} reference workbooks exactly match original SHA-256, file size, modification time and inventory. No reference workbook was saved.',
         'Every automated write used a copied workbook below `test_workspace`. Test databases are independently created, not the desktop application database.', '',
         '## COMPLETED', '',
         '- SQLite numbered migrations, stable employee IDs, separate aliases, scoped calendar/rules, monthly evidence, effective reuse policies and transactional audit.',

@@ -1,5 +1,6 @@
 from pathlib import Path
 import sqlite3
+import sqlite3
 
 import pytest
 
@@ -20,7 +21,21 @@ def test_all_required_entities_and_repeat_migrations(repository):
     assert {'employees', 'employee_aliases', 'payroll_profiles', 'company_calendar', 'attendance_events',
             'monthly_payroll', 'monthly_payroll_items', 'remembered_values', 'audit_log', 'processed_files'} <= tables
     repository.db.migrate()
-    assert repository.db.query('SELECT COUNT(*) AS n FROM schema_migrations')[0]['n'] == 1
+    assert repository.db.query('SELECT COUNT(*) AS n FROM schema_migrations')[0]['n'] == 4
+
+
+def test_migration_four_upgrades_existing_database_without_losing_settings(workbook_workspace):
+    path = workbook_workspace / 'upgrade.db'
+    repository = Repository(Database(path))
+    repository.set_setting('existing_value', {'preserve': True})
+    with sqlite3.connect(path) as con:
+        con.execute('DROP TABLE automation_job_failures')
+        con.execute('DROP TABLE automation_jobs')
+        con.execute('DELETE FROM schema_migrations WHERE version=4')
+    upgraded = Repository(Database(path))
+    assert upgraded.setting('existing_value') == {'preserve': True}
+    assert upgraded.db.query('SELECT COUNT(*) AS n FROM schema_migrations')[0]['n'] == 4
+    assert upgraded.db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='automation_jobs'")
 
 
 def test_stable_identity_and_alias_survive_restart(repository):
@@ -82,6 +97,13 @@ def test_remembered_values_validity_and_policy(repository):
     assert repository.remembered(eid, 'phone', '2026-10-01') is None
     with pytest.raises(sqlite3.IntegrityError):
         repository.remember_value(eid, 'phone', '500', '2026-10-01', valid_to='2026-09-01')
+
+
+def test_employee_end_is_effective_dated_and_keeps_historical_periods(repository):
+    eid = repository.create_employee('leaving employee')
+    repository.end_employee(eid, 2026, 10, reason='employment ended')
+    assert repository.active_for_period(eid, 2026, 10)
+    assert not repository.active_for_period(eid, 2026, 11)
 
 
 def test_transaction_rolls_back_data_and_audit(repository):

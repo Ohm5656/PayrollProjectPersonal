@@ -79,4 +79,35 @@ MIGRATIONS = [(1, [
     """CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)""",
     "CREATE INDEX events_employee_date ON attendance_events(employee_id,date)",
     "CREATE INDEX audit_timestamp ON audit_log(timestamp)",
+]), (2, [
+    """CREATE TABLE recurring_value_effective (
+        employee_id TEXT NOT NULL REFERENCES employees(id), field_key TEXT NOT NULL,
+        value TEXT NOT NULL, effective_from TEXT NOT NULL, effective_to TEXT,
+        scope TEXT NOT NULL CHECK(scope IN ('CURRENT_MONTH','FROM_THIS_MONTH')),
+        reason TEXT NOT NULL, confirmed_by TEXT NOT NULL, created_at TEXT NOT NULL,
+        PRIMARY KEY(employee_id,field_key,effective_from,scope),
+        CHECK(effective_to IS NULL OR effective_to >= effective_from))""",
+    "CREATE INDEX recurring_value_lookup ON recurring_value_effective(employee_id,field_key,effective_from,effective_to)",
+]), (3, [
+    """CREATE TABLE employee_endings (
+        employee_id TEXT PRIMARY KEY REFERENCES employees(id), last_year INTEGER NOT NULL,
+        last_month INTEGER NOT NULL CHECK(last_month BETWEEN 1 AND 12), reason TEXT NOT NULL,
+        confirmed_by TEXT NOT NULL, confirmed_at TEXT NOT NULL)""",
+]), (4, [
+    """CREATE TABLE automation_jobs (
+        id TEXT PRIMARY KEY, source_path TEXT NOT NULL, source_hash TEXT NOT NULL,
+        period_year INTEGER, period_month INTEGER CHECK(period_month IS NULL OR period_month BETWEEN 1 AND 12),
+        job_type TEXT NOT NULL, context TEXT NOT NULL, state TEXT NOT NULL
+            CHECK(state IN ('PENDING','PROCESSING','REVIEW_REQUIRED','COMPLETED','FAILED')),
+        created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT,
+        attempt_count INTEGER NOT NULL DEFAULT 0, failure_code TEXT, failure_message TEXT,
+        payroll_run_id TEXT REFERENCES payroll_runs(id), write_operation_id TEXT REFERENCES write_operations(id),
+        review_required INTEGER NOT NULL DEFAULT 0, idempotency_key TEXT NOT NULL UNIQUE,
+        worker_instance_id TEXT, claimed_at TEXT, updated_at TEXT NOT NULL)""",
+    "CREATE INDEX automation_jobs_state_updated ON automation_jobs(state,updated_at DESC)",
+    "CREATE INDEX automation_jobs_run_state ON automation_jobs(payroll_run_id,state)",
+    """CREATE TABLE automation_job_failures (
+        id INTEGER PRIMARY KEY, job_id TEXT NOT NULL REFERENCES automation_jobs(id) ON DELETE CASCADE,
+        attempt_count INTEGER NOT NULL, code TEXT NOT NULL, message TEXT NOT NULL, created_at TEXT NOT NULL)""",
+    "CREATE INDEX automation_job_failures_job ON automation_job_failures(job_id,id DESC)",
 ])]

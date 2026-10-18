@@ -42,18 +42,19 @@ def main():
         # Test-only environment flags must not turn a manual launch invisible.
         if os.environ.get('QT_QPA_PLATFORM') in {'offscreen','minimal'}:
             os.environ.pop('QT_QPA_PLATFORM')
-    from PySide6.QtCore import QLockFile, QTimer
+    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
     from app.ui.main_window import MainWindow
     from app.ui.tray import PayrollTray
     from app.ui.lifecycle import WindowController
     from app.ui.single_instance import SingleInstance
+    from app.services.automation_runtime import AutomationRuntime
     application = QApplication(sys.argv[:1])
     application.setApplicationName('NTP Payroll Assistant')
     logger = configure_logging()
     instance=SingleInstance(application)
     try:
-        if not instance.acquire_or_notify():return 0
+        if not instance.acquire_or_notify(show_existing=not args.startup):return 0
         logger.info('Application started pid=%s mode=%s platform=%s',os.getpid(),'startup' if args.startup or args.minimized else 'manual',application.platformName())
         def exception_hook(kind,value,traceback):
             logger.error('Unhandled UI signal exception',exc_info=(kind,value,traceback))
@@ -65,31 +66,38 @@ def main():
         if evidence.exists():
             import_history(repo, json.loads(evidence.read_text(encoding='utf-8')), ROOT / 'reference_data')
         service = PayrollService(repo)
+        runtime = AutomationRuntime(service, application)
+        application.automation_runtime = runtime
         from app.excel.payroll_writer import PayrollWriter
-        controller=WindowController(application,lambda:MainWindow(service,writer=PayrollWriter(service)))
-        window=controller.ensure_window()
-        tray = PayrollTray(window, application,show_main_window=controller.show_main_window)
+        writer = PayrollWriter(service)
+        controller=WindowController(application,lambda:MainWindow(service,writer=writer,runtime=runtime))
+        tray = PayrollTray(runtime, application, show_main_window=controller.show_main_window,
+                           get_window=controller.ensure_window)
         application.payroll_tray=tray
         instance.show_requested.connect(lambda:controller.show_main_window('second_launch'))
-        window.tray = tray
-        window.configure_watcher()
         available = QSystemTrayIcon.isSystemTrayAvailable()
         application.setQuitOnLastWindowClosed(not available)
         if available:
             tray.show()
+        runtime.start()
         if should_show_main_window(startup=args.startup,minimized=args.minimized,tray_available=available):
             controller.show_main_window('manual_launch' if not args.smoke_test else 'smoke_test')
-        application.aboutToQuit.connect(window.shutdown)
+            if not args.smoke_test:
+                QTimer.singleShot(0, lambda: controller.ensure_window().first_run_setup())
+        application.aboutToQuit.connect(runtime.shutdown)
         if args.smoke_test:
             QTimer.singleShot(500, application.quit)
         logger.info('Desktop application started in copies-only mode')
         if os.name == 'nt':
             import win32gui,win32process
             info=win32process.GetStartupInfo()
+            window = controller.window
+            handle = int(window.winId()) if window else None
             logger.info('Launch probe platform=%s qt_visible=%s native_visible=%s minimized=%s startup_flags=%s startup_show=%s hwnd=%s',
-                application.platformName(),window.isVisible(),bool(win32gui.IsWindowVisible(int(window.winId()))),window.isMinimized(),info.dwFlags,info.wShowWindow,int(window.winId()))
+                application.platformName(),bool(window and window.isVisible()),bool(handle and win32gui.IsWindowVisible(handle)),
+                bool(window and window.isMinimized()),info.dwFlags,info.wShowWindow,handle)
         result = application.exec()
-        window.shutdown()
+        runtime.shutdown()
         logger.info('Desktop application exited')
         return result
     except Exception as exc:

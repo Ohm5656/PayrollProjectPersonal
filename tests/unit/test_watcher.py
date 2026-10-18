@@ -5,6 +5,7 @@ from time import sleep
 import shutil
 
 from app.services.watcher import AttendanceWatcher
+from app.services.watcher import AttendanceFolderWatcher
 from app.excel.workbook_source import WorkbookSnapshot
 
 
@@ -93,3 +94,23 @@ def test_actual_watchdog_observes_atomic_save(copied_reference, workbook_workspa
         replacement.replace(path)
         assert done.wait(5)
     finally: assert watcher.stop()
+
+
+def test_folder_watcher_accepts_only_saved_xlsx_in_approved_folder(copied_reference, workbook_workspace):
+    source = next((copied_reference / 'attendance').glob('* 8.xlsx'))
+    folder = workbook_workspace / 'attendance'
+    folder.mkdir()
+    target = folder / source.name
+    shutil.copy2(source, target)
+    done, calls = Event(), []
+    watcher = AttendanceFolderWatcher(folder, lambda p: (calls.append(p) or {'draft': SimpleNamespace(source_hash=WorkbookSnapshot.read(p).sha256)}),
+                                      debounce=.01, settle=.001, on_result=lambda _: done.set())
+    watcher.start(observe=False)
+    try:
+        watcher.queue(folder / ('~$' + source.name))
+        watcher.queue(workbook_workspace / 'other.xlsx')
+        watcher.queue(target)
+        assert done.wait(3)
+        assert calls == [target.resolve()]
+    finally:
+        assert watcher.stop()

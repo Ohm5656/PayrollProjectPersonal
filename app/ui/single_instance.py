@@ -25,7 +25,7 @@ class SingleInstance(QObject):
         self.connections=[]
         self.primary=False
 
-    def acquire_or_notify(self):
+    def acquire_or_notify(self, *, show_existing=True):
         if self.lock.tryLock(100):
             self.primary=True
             QLocalServer.removeServer(self.name)  # Only the current lock owner may remove a stale endpoint.
@@ -37,7 +37,10 @@ class SingleInstance(QObject):
         socket.connectToServer(self.name)
         if not socket.waitForConnected(3000):
             raise RuntimeError('โปรแกรมเปิดอยู่แล้ว แต่ยังเรียกหน้าต่างไม่ได้ กรุณารอสักครู่แล้วเปิดอีกครั้ง')
-        socket.write(b'show\n')
+        # A duplicate Scheduled Task launch proves the existing tray process is
+        # alive but must not unexpectedly surface its main window.
+        request = b'show\n' if show_existing else b'ping\n'
+        socket.write(request)
         socket.flush()
         socket.waitForBytesWritten(1000)
         if not socket.canReadLine():socket.waitForReadyRead(5000)
@@ -53,9 +56,14 @@ class SingleInstance(QObject):
             self.connections.append(socket)
             def read(s=socket):
                 if not s.canReadLine():return
-                if bytes(s.readLine())==b'show\n':
+                request = bytes(s.readLine())
+                if request==b'show\n':
                     logging.getLogger('ntp').info('Existing application received show request')
                     self.show_requested.emit()
+                    s.write(b'ok\n')
+                    s.flush()
+                elif request==b'ping\n':
+                    logging.getLogger('ntp').info('Existing application received silent startup probe')
                     s.write(b'ok\n')
                     s.flush()
                 s.disconnectFromServer()
@@ -68,6 +76,11 @@ class SingleInstance(QObject):
 
     def close(self):
         if self.primary:
+            for socket in list(self.connections):
+                socket.disconnectFromServer()
+                socket.deleteLater()
+            self.connections.clear()
             self.server.close()
+            QLocalServer.removeServer(self.name)
             self.lock.unlock()
             self.primary=False
