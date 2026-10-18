@@ -23,6 +23,7 @@ from app.ui.overview_page import OverviewPage
 from app.ui.review_queue_model import ReviewQueueModel
 from app.ui.review_queue_page import ReviewQueuePage
 from app.ui.employee_detail_page import EmployeeDetailPage
+from app.ui.history_page import HistoryPage
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
 
@@ -266,6 +267,8 @@ class MainWindow(QMainWindow):
         self.employee_detail_page.calendar_requested.connect(self.calendar_review)
         self.employee_detail_page.zero_review_requested.connect(self._review_employee_zeros)
         self._detail_return_page = 'overview'
+        self.history_page = HistoryPage(service.repo)
+        self.history_page.event_activated.connect(self._history_event_selected)
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll),
                               'employee_detail': self.page_host.addWidget(self.employee_detail_page)}
@@ -275,7 +278,7 @@ class MainWindow(QMainWindow):
             ('problems', '', None),
             ('settings', 'เปิดหน้าตั้งค่าปัจจุบัน', self.settings),
         ):
-            page = self.review_queue_page if page_id == 'review' else self._placeholder_page(page_id, action_text, action)
+            page = self.review_queue_page if page_id == 'review' else self.history_page if page_id == 'history' else self._placeholder_page(page_id, action_text, action)
             self._page_indexes[page_id] = self.page_host.addWidget(page)
         self.navigate_to('overview')
         self.refresh_overview()
@@ -317,6 +320,8 @@ class MainWindow(QMainWindow):
         self.page_header.set_content(title, subtitle)
         if page_id == 'review':
             self.refresh_review_queue()
+        elif page_id == 'history':
+            self.history_page.refresh()
         self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
 
     def show_legacy_workflow(self):
@@ -832,19 +837,9 @@ class MainWindow(QMainWindow):
 
     def history(self):
         self.navigate_to('history')
-        dialog = QDialog(self)
-        dialog.setWindowTitle('ประวัติการตรวจสอบ')
-        dialog.resize(880, 490)
-        layout = QVBoxLayout(dialog)
-        rows = self.service.repo.audit_history()
-        table = QTableWidget(len(rows), 4)
-        table.setHorizontalHeaderLabels(['เวลา', 'การดำเนินการ', 'เดือน', 'ผู้ตรวจสอบ'])
-        for i, row in enumerate(rows):
-            for j, value in enumerate([row['timestamp'], text(row['action']), f'{row["month"] or ""}/{row["year"] or ""}', row['actor']]):
-                table.setItem(i, j, QTableWidgetItem(str(value)))
-        table.resizeColumnsToContents()
-        layout.addWidget(table)
-        dialog.exec()
+
+    def _history_event_selected(self, event_id):
+        self.statusBar().showMessage(f'เลือกประวัติรายการ {event_id}')
 
     def settings(self):
         self.navigate_to('settings')
