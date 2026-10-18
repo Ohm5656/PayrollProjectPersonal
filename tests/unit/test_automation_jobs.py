@@ -1,11 +1,13 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
 from app.db.database import Database
 from app.db.repositories import Repository
 from app.domain import utc_now
 from app.excel.workbook_source import file_hash
-from app.services.automation_job_service import AutomationJobService, AutomationJobState
+from app.services.automation_job_service import AutomationJobError, AutomationJobService, AutomationJobState
 from app.services.automation_runtime import AutomationRuntime, RuntimeState
 from app.services.payroll_service import PayrollService
 
@@ -119,6 +121,27 @@ def test_runtime_retry_claims_same_failed_job_and_persists_attempt_count(copied_
     assert result['automation_job']['id'] == job['id']
     assert saved['attempt_count'] == 2
     assert saved['state'] in {AutomationJobState.COMPLETED, AutomationJobState.REVIEW_REQUIRED}
+
+
+def test_manual_retry_rejects_changed_manual_configuration_before_claiming(workbook_workspace):
+    source, payroll, changed_payroll = (workbook_workspace / name for name in ('manual.xlsx', 'payroll.xlsx', 'changed.xlsx'))
+    source.write_bytes(b'known bytes'); payroll.write_bytes(b'payroll'); changed_payroll.write_bytes(b'changed')
+    service = PayrollService(Repository(Database(workbook_workspace / 'manual-retry.db')))
+    runtime = AutomationRuntime(service, folder_watcher_factory=FakeFolderWatcher)
+    runtime.configure_manual_sources(source, payroll, 2026, 9)
+    job, _ = runtime.jobs.create(source, file_hash(source), job_type='MANUAL',
+                                 context=runtime._job_context('MANUAL', payroll_path=str(payroll), year=2026, month=9),
+                                 year=2026, month=9)
+    runtime.jobs.claim_pending(job['id'], 'old-worker')
+    runtime.jobs.fail(job['id'], 'READ_ERROR', 'safe failure')
+    runtime.configure_manual_sources(source, changed_payroll, 2026, 9)
+
+    with pytest.raises(AutomationJobError, match='manual configuration differs'):
+        runtime.retry_job(job['id'])
+
+    saved = runtime.jobs.get(job['id'])
+    assert saved['state'] == AutomationJobState.FAILED
+    assert saved['failure_code'] == 'CONFIGURATION_CHANGED'
 
 
 def test_review_job_completes_only_after_persisted_ready_run_has_no_pending_source_change(workbook_workspace):

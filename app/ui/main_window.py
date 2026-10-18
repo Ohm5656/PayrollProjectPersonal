@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
         self.problems_page.staged_writes_requested.connect(self._show_staged_writes)
         self.problem_detail_page = ProblemJobDetailPage()
         self.problem_detail_page.back_requested.connect(lambda: self.navigate_to('problems'))
+        self.problem_detail_page.retry_requested.connect(self._retry_problem_job)
         self.staged_write_page = StagedWriteInspectionPage()
         self.staged_write_page.back_requested.connect(lambda: self.navigate_to('problems'))
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
@@ -899,7 +900,10 @@ class MainWindow(QMainWindow):
         if not job:
             self.statusBar().showMessage('ไม่พบรายการงานที่เลือก')
             return
-        self.problem_detail_page.refresh(job, self.problems_model.job(job))
+        retry_allowed = False
+        if self.runtime:
+            retry_allowed, _ = self.runtime.retry_eligibility(job_id)
+        self.problem_detail_page.refresh(job, self.problems_model.job(job), retry_allowed=retry_allowed)
         self.page_host.setCurrentIndex(self._page_indexes['problem_detail'])
         self.page_header.set_content('รายละเอียดปัญหา', 'แสดงข้อมูลที่บันทึกไว้และแนวทางดำเนินการอย่างปลอดภัย')
 
@@ -908,6 +912,43 @@ class MainWindow(QMainWindow):
         self.staged_write_page.refresh(snapshot.staged_writes)
         self.page_host.setCurrentIndex(self._page_indexes['staged_writes'])
         self.page_header.set_content('ตรวจสอบการเขียน Excel', 'รายการค้างตรวจสอบแบบอ่านอย่างเดียว')
+
+    def _retry_problem_job(self, job_id):
+        if not self.runtime or self.busy:
+            return
+        job = self.runtime.jobs.get(job_id)
+        allowed, reason = self.runtime.retry_eligibility(job_id)
+        if not job or not allowed:
+            self.statusBar().showMessage(reason or 'ไม่สามารถลองงานนี้ใหม่ได้')
+            return
+        source_name = Path(job.get('source_path') or '').name or 'ไม่ระบุไฟล์ต้นทาง'
+        answer = QMessageBox.question(
+            self, 'ยืนยันการลองประมวลผลใหม่',
+            f'ลองประมวลผลงานนี้อีกครั้งหรือไม่?\nไฟล์ต้นทาง: {source_name}\nรอบ: '
+            f'{self.problems_model.job(job).period_label}\nระบบจะตรวจสอบไฟล์และการตั้งค่าก่อนเริ่มงาน',
+            QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self.problem_detail_page.retry.setEnabled(False)
+        self.work(lambda: self.runtime.retry_job(job_id),
+                  lambda result: self._retry_problem_finished(job_id, result))
+
+    def _retry_problem_finished(self, job_id, result):
+        actual = self.runtime.jobs.get(job_id) if self.runtime else None
+        self.problems_page.refresh()
+        self.refresh_overview()
+        self.refresh_review_queue()
+        if actual:
+            allowed, _ = self.runtime.retry_eligibility(job_id)
+            self.problem_detail_page.refresh(actual, self.problems_model.job(actual), retry_allowed=allowed)
+        replacement = result.get('changed_source_job') if isinstance(result, dict) else None
+        if replacement:
+            self.statusBar().showMessage(
+                f'ไฟล์ต้นทางมีการเปลี่ยนแปลง: สร้างงานใหม่สถานะ {replacement.get("state")} แล้ว '
+                'ยังไม่ได้ยืนยันว่าประมวลผลสำเร็จ')
+        elif actual:
+            self.statusBar().showMessage(f'ผลการลองใหม่ที่บันทึกไว้: {actual.get("state")}')
 
     def _history_event_selected(self, event_id):
         row = self.service.repo.audit_event(event_id)

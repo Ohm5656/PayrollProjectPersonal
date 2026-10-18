@@ -34,7 +34,7 @@ class ProblemJobDetailPage(QWidget):
         self.back.clicked.connect(self.back_requested)
         controls.addWidget(self.retry); controls.addWidget(self.back); controls.addStretch(); layout.addLayout(controls)
 
-    def refresh(self, raw_job, presented):
+    def refresh(self, raw_job, presented, *, retry_allowed=False):
         self._job_id = presented.id
         self.summary.setText(presented.title + '\n' + presented.detail)
         values = {
@@ -46,7 +46,7 @@ class ProblemJobDetailPage(QWidget):
         }
         for key, value in values.items(): self.values[key].setText(value)
         self.technical.setPlainText(raw_job.get('failure_message') or 'ไม่มีรายละเอียดเพิ่มเติมที่บันทึกไว้')
-        self.retry.setEnabled(False)
+        self.retry.setEnabled(bool(retry_allowed))
 
 
 class StagedWriteInspectionPage(QWidget):

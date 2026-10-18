@@ -6,6 +6,7 @@ from app.ui.problems_model import ProblemsViewModel
 from app.ui.problems_page import ProblemsPage
 from app.excel.workbook_source import file_hash
 from tests.unit.test_ui import qt_app, draft_case
+from PySide6.QtWidgets import QMessageBox
 
 
 def _failed_job(service, source):
@@ -59,4 +60,24 @@ def test_problem_detail_keeps_persisted_job_identity_and_safe_source_name(qt_app
     assert window.problem_detail_page.values['source'].text() == 'private-source.xlsx'
     assert str(workbook_workspace) not in window.problem_detail_page.values['source'].text()
     assert AutomationJobService(service.repo).get(failed['id']) == before
+    window.close()
+
+
+def test_retry_is_explicit_and_routes_only_through_runtime(qt_app, draft_case, workbook_workspace, monkeypatch):
+    service = PayrollService(draft_case[0])
+    failed = _failed_job(service, workbook_workspace / 'retry.xlsx')
+    runtime = AutomationRuntime(service, qt_app)
+    calls = []
+    monkeypatch.setattr(runtime, 'retry_eligibility', lambda job_id: (True, '') if job_id == failed['id'] else (False, 'missing'))
+    monkeypatch.setattr(runtime, 'retry_job', lambda job_id: calls.append(job_id) or {'retried': False})
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Yes)
+    window = MainWindow(service, runtime=runtime)
+    monkeypatch.setattr(window, 'work', lambda task, success: success(task()))
+
+    window._problem_job_selected(failed['id'])
+    assert window.problem_detail_page.retry.isEnabled()
+    window.problem_detail_page.retry.click()
+
+    assert calls == [failed['id']]
+    assert runtime.watcher is None
     window.close()

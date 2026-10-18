@@ -414,7 +414,8 @@ class AutomationRuntime(QObject):
         if job['job_type'] == 'MANUAL':
             context = job['context']
             current = self.repo.setting(self.MANUAL_SETTING)
-            if not current or any(current.get(key) != context.get(key) for key in ('attendance_path', 'payroll_path', 'year', 'month')):
+            expected = {**context, 'attendance_path': context.get('attendance_path', job['source_path'])}
+            if not current or any(current.get(key) != expected.get(key) for key in ('attendance_path', 'payroll_path', 'year', 'month')):
                 raise AutomationJobError('Current manual configuration differs from the pending job')
             source = Path(job['source_path'])
             payroll = development_target(Path(context['payroll_path']))
@@ -555,12 +556,15 @@ class AutomationRuntime(QObject):
                                          work=lambda: self.workflow.process_attendance(path), announce=announce)
 
     def _process_manual_attendance(self, path, payroll, year, month, *, announce=True):
-        context = self._job_context('MANUAL', payroll_path=str(payroll), year=year, month=month)
+        context = self._job_context('MANUAL', attendance_path=str(Path(path).resolve()), payroll_path=str(payroll), year=year, month=month)
         return self._enqueue_and_process(path, job_type='MANUAL', context=context, year=year, month=month,
                                          work=lambda: self.service.prepare(path, payroll, year=year, month=month), announce=announce)
 
     def retry_job(self, job_id):
         """Retry exactly the failed source, or persist a separate job for changed bytes."""
+        persisted = self.jobs.get(job_id)
+        if not persisted or not self._retry_source_within_boundary(persisted):
+            raise AutomationJobError('Failed job source is outside the currently approved safety boundary')
         job, replacement, _ = self.jobs.retry_source(job_id)
         if replacement:
             self.last_job_summary = replacement
@@ -572,6 +576,13 @@ class AutomationRuntime(QObject):
             work = lambda: self.workflow.process_attendance(job['source_path'])
         elif job['job_type'] == 'MANUAL':
             context = job['context']
+            expected = {**context, 'attendance_path': context.get('attendance_path', job['source_path'])}
+            current = self.repo.setting(self.MANUAL_SETTING)
+            if not current or any(current.get(key) != expected.get(key)
+                                  for key in ('attendance_path', 'payroll_path', 'year', 'month')):
+                self.jobs.fail(job_id, 'CONFIGURATION_CHANGED',
+                               'Current manual configuration differs from the failed job')
+                raise AutomationJobError('Current manual configuration differs from the failed job')
             payroll = development_target(Path(context['payroll_path']))
             work = lambda: self.service.prepare(job['source_path'], payroll, year=context['year'], month=context['month'])
         else:
@@ -580,6 +591,55 @@ class AutomationRuntime(QObject):
         if not success:
             raise AutomationJobError(f'Automation job {job_id} could not be claimed for retry')
         return self._execute_claimed_job(claimed, Path(claimed['source_path']), work)
+
+    def retry_eligibility(self, job_id):
+        """Read-only UI preflight; retry_job still validates and claims atomically."""
+        job = self.jobs.get(job_id)
+        if not job or job['state'] != AutomationJobState.FAILED:
+            return False, 'เลือกรายการงานที่ล้มเหลวที่ยังมีอยู่ก่อนลองใหม่'
+        if self._shutdown_requested:
+            return False, 'ไม่สามารถลองงานใหม่ระหว่างที่โปรแกรมกำลังปิด'
+        if self.state == RuntimeState.PROCESSING:
+            return False, 'มีงานอื่นกำลังประมวลผลอยู่ กรุณารอให้เสร็จก่อน'
+        if not self._retry_source_within_boundary(job):
+            return False, 'ไฟล์ต้นทางอยู่นอกขอบเขตที่อนุญาต หรือไม่พร้อมใช้งาน'
+        if job['job_type'] == 'FOLDER':
+            if not self.workflow.configured() or job['context'] != self._job_context('FOLDER'):
+                return False, 'การตั้งค่าโฟลเดอร์ปัจจุบันไม่ตรงกับงานเดิม'
+        elif job['job_type'] == 'MANUAL':
+            current = self.repo.setting(self.MANUAL_SETTING)
+            context = job['context']
+            expected = {**context, 'attendance_path': context.get('attendance_path', job['source_path'])}
+            if not current or any(current.get(key) != expected.get(key)
+                                  for key in ('attendance_path', 'payroll_path', 'year', 'month')):
+                return False, 'การตั้งค่าไฟล์ปัจจุบันไม่ตรงกับงานเดิม'
+        else:
+            return False, 'ประเภทงานนี้ไม่รองรับการลองใหม่'
+        return True, ''
+
+    def _retry_source_within_boundary(self, job):
+        """Cheap, non-mutating path boundary check before hashing a retry source."""
+        source = Path(job['source_path'])
+        if not source.is_file():
+            return False
+        if job['job_type'] == 'FOLDER':
+            if not self.workflow.configured():
+                return False
+            try:
+                folder = Path(self.workflow.configuration()['attendance_folder']).resolve()
+                resolved = source.resolve()
+            except Exception:
+                return False
+            return (resolved.parent == folder and resolved.suffix.lower() == '.xlsx'
+                    and not resolved.name.startswith('~$'))
+        if job['job_type'] == 'MANUAL':
+            context = job['context']
+            try:
+                attendance = context.get('attendance_path', job['source_path'])
+                return source.resolve() == development_target(Path(attendance))
+            except Exception:
+                return False
+        return False
 
     def review_resolved(self, run):
         """Synchronize durable review jobs only after persisted payroll evidence is ready."""
