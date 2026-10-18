@@ -10,6 +10,7 @@ from app.db.repositories import Repository
 from app.services.automation_runtime import AutomationRuntime, RuntimeState
 from app.services.payroll_service import PayrollService
 from app.services.windows_startup import StartupResult, StartupState, StartupStatus
+from app.services.workflow_service import WorkflowService
 from app.ui.main_window import MainWindow
 from app.ui.setup_wizard import SetupWizard
 from app.ui.tray import PayrollTray
@@ -139,4 +140,19 @@ def test_startup_install_failure_reports_persisted_workflow_partial_change(qt_ap
     assert len(workflow.configured_values) == 1 and startup.installs == 1
     assert wizard.result() != QDialog.Accepted
     assert 'บันทึกโฟลเดอร์แล้ว' in wizard.error.text()
+    wizard.close()
+
+
+def test_settings_rejects_non_copy_paths_before_attempting_windows_startup(qt_app, workbook_workspace, tmp_path):
+    service = PayrollService(Repository(Database(workbook_workspace / 'safety.db')))
+    workflow, startup = WorkflowService(service), FakeStartup()
+    outside_attendance, outside_payroll = tmp_path / 'attendance', tmp_path / 'payroll'
+    outside_attendance.mkdir(); outside_payroll.mkdir()
+    wizard = SetupWizard(workflow, startup_service=startup)
+    wizard.attendance.setText(str(outside_attendance))
+    wizard.payroll.setText(str(outside_payroll))
+    wizard.start_with_windows.setChecked(True)
+    wizard.save()
+    assert workflow.configuration() is None and startup.installs == 0
+    assert wizard.result() != QDialog.Accepted
     wizard.close()
