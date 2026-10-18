@@ -57,7 +57,7 @@ def _inside(path: Path, folder: Path) -> bool:
     return resolved != base and base in resolved.parents
 
 
-def validate_workflow_configuration(attendance_folder, payroll_folder, template_path):
+def validate_workflow_configuration(attendance_folder, payroll_folder, template_path, *, allowed_root=None):
     """Validate persisted paths without creating, editing, or opening Excel."""
     attendance, payroll, template = Path(attendance_folder).resolve(), Path(payroll_folder).resolve(), Path(template_path).resolve()
     if not attendance.is_dir() or not payroll.is_dir():
@@ -65,11 +65,14 @@ def validate_workflow_configuration(attendance_folder, payroll_folder, template_
     # Production mode remains disabled.  Folder monitoring/output therefore
     # remains constrained to test_workspace, while the immutable reference
     # master is an allowed read-only input.
-    if not _inside(attendance, TEST_ROOT) and attendance != TEST_ROOT.resolve():
-        raise SafetyError('Development attendance folder must be inside test_workspace')
-    if not _inside(payroll, TEST_ROOT) and payroll != TEST_ROOT.resolve():
-        raise SafetyError('Development payroll folder must be inside test_workspace')
-    if template != master_template_path() and not _inside(template, TEST_ROOT):
+    root = Path(allowed_root or TEST_ROOT).resolve()
+    if root != TEST_ROOT.resolve() and not _inside(root, TEST_ROOT):
+        raise SafetyError('Workflow root must be inside test_workspace')
+    if (attendance != root and not _inside(attendance, root)) or (payroll != root and not _inside(payroll, root)):
+        raise SafetyError('Workflow folders must remain inside the approved test root')
+    if allowed_root is not None and not _inside(template, root):
+        raise SafetyError('QA template must remain inside the approved QA session')
+    if allowed_root is None and template != master_template_path() and not _inside(template, TEST_ROOT):
         raise SafetyError('Template must be the read-only master or a test_workspace copy')
     if template.suffix.lower() != '.xlsx' or not template.is_file():
         raise MonthlyWorkflowError('แม่แบบต้องเป็นไฟล์ .xlsx ที่อ่านได้')

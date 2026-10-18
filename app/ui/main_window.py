@@ -65,10 +65,12 @@ class MainWindow(QMainWindow):
     watched_result = Signal(object)
     watched_error = Signal(str)
 
-    def __init__(self, service, *, writer=None, runtime=None, parent=None, startup_service=None):
+    def __init__(self, service, *, writer=None, runtime=None, parent=None, startup_service=None, qa_environment=None):
         super().__init__(parent)
         self.service, self.writer = service, writer
         self.runtime = runtime
+        self.qa_environment = qa_environment
+        self.qa_mode = qa_environment is not None
         self.workflow = runtime.workflow if runtime else WorkflowService(service)
         self.startup_service = startup_service or WindowsStartupService()
         self.overview_model = OverviewViewModel(service, runtime=runtime, writer=writer,
@@ -93,6 +95,8 @@ class MainWindow(QMainWindow):
             self.runtime.runtime_error.connect(self.receive_watched_error)
             self.runtime.register_shutdown_participant(self.shutdown_ui)
         self.setWindowTitle('NTP Payroll Assistant')
+        if self.qa_mode:
+            self.setWindowTitle('QA MODE — ข้อมูลทดสอบ | NTP Payroll Assistant')
         self.resize(1130, 720)
         self.setMinimumSize(860, 620)
         root = QWidget()
@@ -630,6 +634,9 @@ class MainWindow(QMainWindow):
         self.refresh_overview()
 
     def prepare_month8_uat(self):
+        if self.qa_mode:
+            self.statusBar().showMessage('QA mode disables reference workbook preparation')
+            return
         from app.services.month8_uat import prepare_month8_uat
         def done(result):
             self.manual_recovery.setVisible(False)
@@ -679,7 +686,9 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            development_target(Path(path))
+            selected = development_target(Path(path))
+            if self.qa_mode:
+                self.qa_environment.require_path(selected)
         except RuntimeError:
             QMessageBox.warning(self, 'เลือกไฟล์สำเนา', 'กรุณาเลือกไฟล์สำเนาที่อยู่ในโฟลเดอร์ทดสอบ')
             return
@@ -699,6 +708,9 @@ class MainWindow(QMainWindow):
             self.receive_watched_error(str(exc))
 
     def prepare_copies(self):
+        if self.qa_mode:
+            self.statusBar().showMessage('QA mode uses synthetic fixtures only; reference workbook copying is disabled')
+            return
         month = self.month.value()
         def copy():
             paths = {}
@@ -732,6 +744,13 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage('ไฟล์สำเนาที่เลือกเป็นคนละรอบ กรุณาเลือกหรือเตรียมสำเนาสำหรับรอบนี้')
             return
         attendance_path, payroll_path = Path(self.attendance.text()), Path(self.payroll.text())
+        if self.qa_mode:
+            try:
+                self.qa_environment.require_path(attendance_path)
+                self.qa_environment.require_path(payroll_path)
+            except RuntimeError as exc:
+                self.statusBar().showMessage(str(exc))
+                return
         year, month = self.year.value(), self.month.value()
         self.service.repo.set_setting('actor', self.actor.text())
         self.work(lambda: self.service.prepare(attendance_path, payroll_path, force=True, year=year, month=month), self.show_result)
@@ -1153,6 +1172,8 @@ class MainWindow(QMainWindow):
 
     def first_run_setup(self):
         """Show setup only on an interactive first launch, never in Qt tests."""
+        if self.qa_mode:
+            return
         if self.workflow.configured():
             return
         from PySide6.QtWidgets import QApplication

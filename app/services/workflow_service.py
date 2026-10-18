@@ -13,9 +13,10 @@ WORKFLOW_SETTING = 'workflow_configuration'
 
 
 class WorkflowService:
-    def __init__(self, payroll_service):
+    def __init__(self, payroll_service, *, allowed_root=None):
         self.payroll_service = payroll_service
         self.repo = payroll_service.repo
+        self.allowed_root = Path(allowed_root).resolve() if allowed_root else None
 
     def configuration(self):
         return self.repo.setting(WORKFLOW_SETTING)
@@ -26,7 +27,7 @@ class WorkflowService:
 
     def configure(self, attendance_folder, payroll_folder, template_path=None):
         attendance, payroll, template = validate_workflow_configuration(
-            attendance_folder, payroll_folder, template_path or master_template_path())
+            attendance_folder, payroll_folder, template_path or master_template_path(), allowed_root=self.allowed_root)
         value = {'attendance_folder': str(attendance), 'payroll_folder': str(payroll), 'template_path': str(template)}
         self.repo.set_setting(WORKFLOW_SETTING, value)
         return value
@@ -36,7 +37,7 @@ class WorkflowService:
         if not config:
             raise MonthlyWorkflowError('ยังไม่ได้ตั้งค่าโฟลเดอร์ทำงาน')
         attendance_folder, payroll_folder, template = validate_workflow_configuration(
-            config['attendance_folder'], config['payroll_folder'], config['template_path'])
+            config['attendance_folder'], config['payroll_folder'], config['template_path'], allowed_root=self.allowed_root)
         source = Path(path).resolve()
         if not self.is_approved_attendance_source(source, attendance_folder=attendance_folder):
             raise SafetyError('Attendance event is outside the configured folder')

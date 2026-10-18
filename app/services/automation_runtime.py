@@ -54,11 +54,12 @@ class AutomationRuntime(QObject):
     RESTART_BACKOFF_MS = (2_000, 5_000, 15_000)
 
     def __init__(self, payroll_service, parent=None, *, folder_watcher_factory=AttendanceFolderWatcher,
-                 file_watcher_factory=AttendanceWatcher):
+                 file_watcher_factory=AttendanceWatcher, qa_mode=False, qa_root=None):
         super().__init__(parent)
         self.service = payroll_service
         self.repo = payroll_service.repo
-        self.workflow = WorkflowService(payroll_service)
+        self.qa_mode, self.qa_root = bool(qa_mode), Path(qa_root).resolve() if qa_root else None
+        self.workflow = WorkflowService(payroll_service, allowed_root=self.qa_root)
         self.jobs = AutomationJobService(self.repo)
         self.worker_instance_id = str(uuid4())
         self.folder_watcher_factory = folder_watcher_factory
@@ -89,6 +90,8 @@ class AutomationRuntime(QObject):
 
     @property
     def monitoring_enabled(self):
+        if self.qa_mode:
+            return False
         return bool(self.repo.setting('watch_enabled', False))
 
     def start(self):
@@ -98,6 +101,10 @@ class AutomationRuntime(QObject):
         persistent idempotency key and an atomic PENDING claim remain the final
         protection if an event is nevertheless delivered around that boundary.
         """
+        if self.qa_mode:
+            self.repo.set_setting('watch_enabled', False)
+            self._set_state(RuntimeState.DISABLED)
+            return False
         if not self._recovery_complete:
             self.recovery = self.jobs.recover_interrupted()
             self.staged_write_recovery = self.jobs.staged_write_inspection()
@@ -124,6 +131,8 @@ class AutomationRuntime(QObject):
 
     def configure_manual_sources(self, attendance_path, payroll_path, year, month):
         """Persist the legacy single-file watcher configuration without owning it in UI."""
+        if self.qa_mode:
+            raise AutomationJobError('Monitoring sources are disabled in QA mode')
         attendance = development_target(Path(attendance_path))
         payroll = development_target(Path(payroll_path))
         value = {'attendance_path': str(attendance), 'payroll_path': str(payroll),
@@ -147,6 +156,11 @@ class AutomationRuntime(QObject):
         return True
 
     def resume_monitoring(self):
+        if self.qa_mode:
+            self.repo.set_setting('watch_enabled', False)
+            self._set_state(RuntimeState.DISABLED)
+            self._runtime_error('Monitoring is disabled in QA mode')
+            return False
         if self._shutdown_requested:
             self._runtime_error('Application shutdown is still waiting for attendance monitoring to stop')
             return False
@@ -155,6 +169,9 @@ class AutomationRuntime(QObject):
         return self.reconfigure()
 
     def reconfigure(self):
+        if self.qa_mode:
+            self._set_state(RuntimeState.DISABLED)
+            return True
         return self._reconfigure()
 
     def _reconfigure(self, *, force_restart=False):
@@ -562,6 +579,8 @@ class AutomationRuntime(QObject):
 
     def retry_job(self, job_id):
         """Retry exactly the failed source, or persist a separate job for changed bytes."""
+        if self.qa_mode:
+            raise AutomationJobError('Retry is disabled in QA mode')
         persisted = self.jobs.get(job_id)
         if not persisted or not self._retry_source_within_boundary(persisted):
             raise AutomationJobError('Failed job source is outside the currently approved safety boundary')
@@ -594,6 +613,8 @@ class AutomationRuntime(QObject):
 
     def retry_eligibility(self, job_id):
         """Read-only UI preflight; retry_job still validates and claims atomically."""
+        if self.qa_mode:
+            return False, 'Retry is disabled in QA mode'
         job = self.jobs.get(job_id)
         if not job or job['state'] != AutomationJobState.FAILED:
             return False, 'เลือกรายการงานที่ล้มเหลวที่ยังมีอยู่ก่อนลองใหม่'

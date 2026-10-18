@@ -19,8 +19,8 @@ def should_show_main_window(*, startup, minimized, tray_available):
     return not (startup or minimized) or not tray_available
 
 
-def configure_logging():
-    path = development_target(TEST_ROOT / 'app_state' / 'logs' / 'app.log')
+def configure_logging(path=None):
+    path = development_target(path or TEST_ROOT / 'app_state' / 'logs' / 'app.log')
     path.parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger('ntp')
     logger.setLevel(logging.INFO)
@@ -35,7 +35,10 @@ def main():
     parser.add_argument('--minimized', action='store_true')
     parser.add_argument('--startup', action='store_true')
     parser.add_argument('--smoke-test', action='store_true')
+    parser.add_argument('--qa-ui', action='store_true', help='Launch an isolated synthetic-only manual UI QA session')
     args = parser.parse_args()
+    if args.qa_ui and (args.startup or args.minimized):
+        parser.error('--qa-ui cannot be combined with startup or minimized launch modes')
     if args.smoke_test:
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
     else:
@@ -51,10 +54,14 @@ def main():
     from app.ui.theme import apply_theme
     from app.services.automation_runtime import AutomationRuntime
     application = QApplication(sys.argv[:1])
-    application.setApplicationName('NTP Payroll Assistant')
+    qa_environment = None
+    if args.qa_ui:
+        from app.qa_environment import QAEnvironment
+        qa_environment = QAEnvironment.create()
+    application.setApplicationName('NTP Payroll Assistant QA' if qa_environment else 'NTP Payroll Assistant')
     apply_theme(application)
-    logger = configure_logging()
-    instance=SingleInstance(application)
+    logger = configure_logging(qa_environment.log_path if qa_environment else None)
+    instance=SingleInstance(application, directory=qa_environment.instance_directory if qa_environment else None)
     try:
         if not instance.acquire_or_notify(show_existing=not args.startup):return 0
         logger.info('Application started pid=%s mode=%s platform=%s',os.getpid(),'startup' if args.startup or args.minimized else 'manual',application.platformName())
@@ -62,17 +69,28 @@ def main():
             logger.error('Unhandled UI signal exception',exc_info=(kind,value,traceback))
             sys.__excepthook__(kind,value,traceback)
         sys.excepthook=exception_hook
-        record_baseline(ROOT / 'reports' / 'source_hash_baseline.json')
-        repo = Repository(Database(TEST_ROOT / 'app_state' / 'data' / 'ntp_payroll.db'))
-        evidence = ROOT / 'reports' / 'historical_analysis.json'
-        if evidence.exists():
-            import_history(repo, json.loads(evidence.read_text(encoding='utf-8')), ROOT / 'reference_data')
+        if qa_environment:
+            from app.qa_environment import QAStartupService, seed_synthetic_fixture
+            repo = Repository(Database(qa_environment.database_path))
+            seed_synthetic_fixture(repo, qa_environment)
+            startup_service = QAStartupService()
+        else:
+            record_baseline(ROOT / 'reports' / 'source_hash_baseline.json')
+            repo = Repository(Database(TEST_ROOT / 'app_state' / 'data' / 'ntp_payroll.db'))
+            evidence = ROOT / 'reports' / 'historical_analysis.json'
+            if evidence.exists():
+                import_history(repo, json.loads(evidence.read_text(encoding='utf-8')), ROOT / 'reference_data')
+            startup_service = None
         service = PayrollService(repo)
-        runtime = AutomationRuntime(service, application)
+        runtime = AutomationRuntime(service, application, qa_mode=bool(qa_environment),
+                                    qa_root=qa_environment.root if qa_environment else None)
         application.automation_runtime = runtime
-        from app.excel.payroll_writer import PayrollWriter
-        writer = PayrollWriter(service)
-        controller=WindowController(application,lambda:MainWindow(service,writer=writer,runtime=runtime))
+        writer = None
+        if not qa_environment:
+            from app.excel.payroll_writer import PayrollWriter
+            writer = PayrollWriter(service)
+        controller=WindowController(application,lambda:MainWindow(
+            service, writer=writer, runtime=runtime, startup_service=startup_service, qa_environment=qa_environment))
         tray = PayrollTray(runtime, application, show_main_window=controller.show_main_window,
                            get_window=controller.ensure_window)
         application.payroll_tray=tray
