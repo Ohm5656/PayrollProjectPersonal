@@ -22,6 +22,7 @@ from app.ui.overview_model import OverviewViewModel, overview_action
 from app.ui.overview_page import OverviewPage
 from app.ui.review_queue_model import ReviewQueueModel
 from app.ui.review_queue_page import ReviewQueuePage
+from app.ui.employee_detail_page import EmployeeDetailPage
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
 
@@ -258,8 +259,12 @@ class MainWindow(QMainWindow):
         self.review_queue_page = ReviewQueuePage()
         self.review_queue_page.overview_requested.connect(lambda: self.navigate_to('overview'))
         self.review_queue_page.issue_activated.connect(self._review_issue_selected)
+        self.employee_detail_page = EmployeeDetailPage()
+        self.employee_detail_page.back_requested.connect(lambda: self.navigate_to(self._detail_return_page))
+        self._detail_return_page = 'overview'
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
-                              'legacy': self.page_host.addWidget(self.compatibility_scroll)}
+                              'legacy': self.page_host.addWidget(self.compatibility_scroll),
+                              'employee_detail': self.page_host.addWidget(self.employee_detail_page)}
         for page_id, action_text, action in (
             ('review', '', None),
             ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
@@ -343,8 +348,23 @@ class MainWindow(QMainWindow):
         self.review_queue_page.refresh(snapshot)
 
     def _review_issue_selected(self, issue):
-        """Decision routing is added in D.3.4; selection itself is read-only."""
+        if issue.employee_id and self.show_employee_detail(issue.employee_id, return_page='review'):
+            return
         self.statusBar().showMessage(f'เลือก {issue.kind}; เปิดการตัดสินใจจากรายการนี้')
+
+    def show_employee_detail(self, employee_id, *, return_page='overview'):
+        """Load evidence for the selected period; rendering has no mutation side effect."""
+        run, draft = self.service.current(self.year.value(), self.month.value())
+        employee = next((candidate for candidate in (draft.employees if draft else ())
+                         if candidate.employee_id == employee_id), None)
+        if not employee:
+            self.statusBar().showMessage('ไม่พบข้อมูลพนักงานสำหรับรอบที่เลือก')
+            return False
+        self._detail_return_page = return_page
+        self.employee_detail_page.refresh(draft, employee, run)
+        self.page_host.setCurrentIndex(self._page_indexes['employee_detail'])
+        self.page_header.set_content('รายละเอียดพนักงาน', 'แสดงหลักฐานและยอดเงินจากฉบับร่างของรอบที่เลือก')
+        return True
 
     def _load_selected_period(self):
         """Use the persisted run for the selected period before an explicit action."""
@@ -608,11 +628,11 @@ class MainWindow(QMainWindow):
         self.navigate_to('review')
 
     def employee_review(self, row, column=0):
-        if not self.draft or self.busy or self.run['state'] in FINAL_STATES:
+        if not self.draft or self.busy:
             return
         employee = self.draft.employees[row]
         if employee.employee_id:
-            EmployeeReview(self.service, self.draft, employee, actor=self.actor.text(), on_changed=self.read_draft, parent=self).exec()
+            self.show_employee_detail(employee.employee_id)
         else:
             self.review()
 

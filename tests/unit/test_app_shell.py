@@ -10,7 +10,7 @@ def test_main_window_has_thai_first_shell_and_page_host(qt_app, draft_case):
 
     assert window.sidebar.objectName() == 'sidebar'
     assert set(window.navigation_buttons) == {'overview', 'review', 'history', 'problems', 'settings'}
-    assert window.page_host.count() == 6
+    assert window.page_host.count() == 7
     assert window.page_host.currentWidget() is window.overview_page
     assert window.navigation_buttons['overview'].isChecked()
     assert window.page_header.title.text() == 'ภาพรวม'
