@@ -3,7 +3,9 @@ from types import SimpleNamespace
 from app.services.automation_runtime import RuntimeState
 from app.services.windows_startup import StartupState, StartupStatus
 from app.ui.overview_model import OverviewViewModel, thai_period
+from app.ui.overview_page import OverviewPage
 from tests.unit.test_draft_engine import calculate, draft_case
+from tests.unit.test_ui import qt_app
 
 
 class FakeService:
@@ -84,3 +86,17 @@ def test_overview_output_labels_keep_confirmed_written_and_locked_distinct(draft
     assert view.snapshot(2026, 9).output_label == 'บันทึกลงไฟล์สำเนาแล้ว'
     view.service.run = {'state': 'LOCKED'}
     assert view.snapshot(2026, 9).payroll_label == 'ปิดรอบเงินเดือนแล้ว'
+
+
+def test_overview_page_binds_real_snapshot_without_mutating_service(qt_app, draft_case):
+    draft = calculate(draft_case)
+    service = FakeService({'state': 'NEEDS_REVIEW'}, draft)
+    snapshot = OverviewViewModel(service, writer=object()).snapshot(2026, 9)
+    page = OverviewPage()
+    page.refresh(snapshot)
+
+    assert page.period.text() == 'กันยายน 2569'
+    assert page.employee_card.value.text() == '1'
+    assert page.review_card.value.text() == f'{len(draft.issues)} รายการ'
+    assert page.empty_state.isHidden()
+    assert service.calls == [(2026, 9)]

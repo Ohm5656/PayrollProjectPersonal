@@ -18,7 +18,10 @@ from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
 from app.ui.review import EmployeeReview, ReviewCenter, money
 from app.ui.presentation import text,error_text
 from app.ui.components import NavigationButton, PageHeader
+from app.ui.overview_model import OverviewViewModel
+from app.ui.overview_page import OverviewPage
 from app.services.workflow_service import WorkflowService
+from app.services.windows_startup import WindowsStartupService
 
 STATE_TEXT = {'DRAFT': 'ฉบับร่าง', 'NEEDS_REVIEW': 'ต้องตรวจสอบ', 'READY': 'พร้อมยืนยัน',
               'CONFIRMED': 'ยืนยันเงินเดือนแล้ว', 'WRITTEN': 'บันทึกลง Excel แล้ว', 'LOCKED': 'ปิดรอบเดือนแล้ว'}
@@ -50,11 +53,14 @@ class MainWindow(QMainWindow):
     watched_result = Signal(object)
     watched_error = Signal(str)
 
-    def __init__(self, service, *, writer=None, runtime=None, parent=None):
+    def __init__(self, service, *, writer=None, runtime=None, parent=None, startup_service=None):
         super().__init__(parent)
         self.service, self.writer = service, writer
         self.runtime = runtime
         self.workflow = runtime.workflow if runtime else WorkflowService(service)
+        self.startup_service = startup_service or WindowsStartupService()
+        self.overview_model = OverviewViewModel(service, runtime=runtime, writer=writer,
+                                                 startup_service=self.startup_service)
         self.draft, self.run, self.busy = None, None, False
         self.tray = getattr(QApplication.instance(), 'payroll_tray', None)
         self.pool = QThreadPool(self)
@@ -149,6 +155,8 @@ class MainWindow(QMainWindow):
         self.month = QSpinBox()
         self.month.setRange(1, 12)
         self.month.setValue(now.month)
+        self.month.valueChanged.connect(self.refresh_overview)
+        self.year.valueChanged.connect(self.refresh_overview)
         period.addWidget(QLabel('เดือน'))
         period.addWidget(self.month)
         period.addWidget(QLabel('ปี ค.ศ.'))
@@ -236,8 +244,10 @@ class MainWindow(QMainWindow):
         self.compatibility_scroll = QScrollArea()
         self.compatibility_scroll.setWidgetResizable(True)
         self.compatibility_scroll.setWidget(self.compatibility_page)
-        self.page_host.addWidget(self.compatibility_scroll)
-        self._page_indexes = {'overview': 0}
+        self.overview_page = OverviewPage()
+        self.overview_page.legacy_button.clicked.connect(self.show_legacy_workflow)
+        self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
+                              'legacy': self.page_host.addWidget(self.compatibility_scroll)}
         for page_id, action_text, action in (
             ('review', 'เปิดศูนย์ตรวจสอบรายการปัจจุบัน', self.review),
             ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
@@ -248,6 +258,7 @@ class MainWindow(QMainWindow):
                 self._placeholder_page(page_id, action_text, action)
             )
         self.navigate_to('overview')
+        self.refresh_overview()
         self._apply_responsive_shell()
         self.statusBar().showMessage('เลือกเดือนและเตรียมสำเนาข้อมูลเพื่อเริ่มทดสอบ')
         self.update_buttons()
@@ -285,6 +296,18 @@ class MainWindow(QMainWindow):
         self.page_header.set_content(title, subtitle)
         self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
 
+    def show_legacy_workflow(self):
+        """Keep every unmigrated payroll operation reachable during D.2."""
+        self.page_host.setCurrentIndex(self._page_indexes['legacy'])
+        self.page_header.set_content('เครื่องมือเงินเดือน', 'เครื่องมือเดิมที่ยังไม่ได้ย้ายเข้าสู่ Overview')
+
+    def refresh_overview(self, *_):
+        snapshot = self.overview_model.snapshot(
+            self.year.value(), self.month.value(),
+            selected_sources={'attendance': self.attendance.text(), 'payroll': self.payroll.text()},
+        )
+        self.overview_page.refresh(snapshot, busy=self.busy)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'sidebar'):
@@ -305,6 +328,7 @@ class MainWindow(QMainWindow):
                     'ERROR': 'เกิดข้อผิดพลาดในการทำงานอัตโนมัติ'}
         self.state_changed.emit(str(state).lower())
         self.statusBar().showMessage(messages.get(str(state), str(state)))
+        self.refresh_overview()
 
     def receive_watched_result(self, result):
         if not self.workflow.configured() and Path(result['draft'].source_path) != Path(self.attendance.text()): return
@@ -320,6 +344,7 @@ class MainWindow(QMainWindow):
     def receive_watched_error(self, message):
         self.state_changed.emit('error')
         self.statusBar().showMessage(message)
+        self.refresh_overview()
         if self.exit_pending and not self.busy:
             self._notify_shutdown_ready()
 
@@ -342,6 +367,7 @@ class MainWindow(QMainWindow):
         self.table.setRowCount(0)
         for card in self.cards.values(): card.setText('—')
         self.update_buttons()
+        self.refresh_overview()
 
     def prepare_month8_uat(self):
         from app.services.month8_uat import prepare_month8_uat
@@ -358,6 +384,7 @@ class MainWindow(QMainWindow):
             return
         self.busy = True
         self.update_buttons()
+        self.refresh_overview()
         self.state_changed.emit('processing')
         job = Job(task)
         self.jobs.append(job)
@@ -366,12 +393,14 @@ class MainWindow(QMainWindow):
             self.jobs.remove(job)
             success(result)
             self.update_buttons()
+            self.refresh_overview()
             if self.exit_pending:
                 self._notify_shutdown_ready()
         def failed(message):
             self.busy = False
             self.jobs.remove(job)
             self.update_buttons()
+            self.refresh_overview()
             self.state_changed.emit('error')
             self.statusBar().showMessage(error_text(message))
             if self.runtime:
@@ -480,6 +509,7 @@ class MainWindow(QMainWindow):
         self.state_changed.emit('review' if self.run['state'] == PayrollState.NEEDS_REVIEW else 'ready')
         self.statusBar().showMessage(f'เดือน {draft.month}/{draft.year + 543} — {STATE_TEXT[self.run["state"]]}')
         self.update_buttons()
+        self.refresh_overview()
 
     def review(self):
         self.navigate_to('review')
