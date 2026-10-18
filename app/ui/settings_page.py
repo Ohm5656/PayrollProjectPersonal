@@ -94,7 +94,8 @@ class SettingsPage(QScrollArea):
         for edit in (self.attendance.edit, self.payroll.edit, self.template.edit):
             edit.textChanged.connect(self._values_changed)
         self.start_with_windows.toggled.connect(self._values_changed)
-        self.load()
+        # Do not query Task Scheduler while the main shell is being created.
+        # MainWindow loads this page only after the user opens Settings.
 
     def _path_input(self, title, *, directory):
         holder = QWidget()
@@ -164,12 +165,12 @@ class SettingsPage(QScrollArea):
         self.save_requested.emit(self.values())
 
     def operation_finished(self, message, *, success, reload=True):
+        if reload:
+            self.load(refresh_startup=True)
         self.message.setText(message)
         self.message.setProperty('semantic', '' if success else 'warning')
         self.message.style().unpolish(self.message)
         self.message.style().polish(self.message)
-        if reload:
-            self.load(refresh_startup=True)
 
     def set_busy(self, busy):
         self.save.setEnabled(not busy)

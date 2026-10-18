@@ -33,6 +33,7 @@ def qt_app():
 def test_settings_page_keeps_dirty_fields_when_refreshing_status(qt_app):
     startup = Startup()
     page = SettingsPage(SettingsViewModel(Workflow(), startup_service=startup))
+    page.load()
     page.attendance.edit.setText('edited-attendance')
     page.start_with_windows.setChecked(True)
 
@@ -47,6 +48,7 @@ def test_settings_page_keeps_dirty_fields_when_refreshing_status(qt_app):
 def test_settings_page_emits_explicit_save_payload_without_mutating_services(qt_app):
     workflow, startup = Workflow(), Startup()
     page = SettingsPage(SettingsViewModel(workflow, startup_service=startup))
+    page.load()
     requests = []
     page.save_requested.connect(requests.append)
     page.attendance.edit.setText('attendance')

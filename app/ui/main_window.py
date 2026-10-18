@@ -29,6 +29,8 @@ from app.ui.history_model import HistoryViewModel
 from app.ui.problems_model import ProblemsViewModel
 from app.ui.problems_page import ProblemsPage
 from app.ui.problems_detail_page import ProblemJobDetailPage, StagedWriteInspectionPage
+from app.ui.settings_model import SettingsViewModel
+from app.ui.settings_page import SettingsPage
 from app.services.payroll_service import PayrollStateError
 from app.services.workflow_service import WorkflowService
 from app.services.windows_startup import WindowsStartupService
@@ -73,6 +75,8 @@ class MainWindow(QMainWindow):
                                                  startup_service=self.startup_service)
         self.review_queue_model = ReviewQueueModel()
         self.problems_model = ProblemsViewModel(service, runtime=runtime)
+        self.settings_model = SettingsViewModel(self.workflow, runtime=runtime,
+                                                startup_service=self.startup_service)
         self.draft, self.run, self.busy = None, None, False
         self.tray = getattr(QApplication.instance(), 'payroll_tray', None)
         self.pool = QThreadPool(self)
@@ -287,6 +291,9 @@ class MainWindow(QMainWindow):
         self.problem_detail_page.retry_requested.connect(self._retry_problem_job)
         self.staged_write_page = StagedWriteInspectionPage()
         self.staged_write_page.back_requested.connect(lambda: self.navigate_to('problems'))
+        self.settings_page = SettingsPage(self.settings_model)
+        self.settings_page.save_requested.connect(self._save_settings)
+        self.settings_page.repair_requested.connect(self._repair_startup)
         self._page_indexes = {'overview': self.page_host.addWidget(self.overview_page),
                               'legacy': self.page_host.addWidget(self.compatibility_scroll),
                               'employee_detail': self.page_host.addWidget(self.employee_detail_page),
@@ -297,10 +304,10 @@ class MainWindow(QMainWindow):
             ('review', '', None),
             ('history', 'เปิดประวัติการตรวจสอบปัจจุบัน', self.history),
             ('problems', '', None),
-            ('settings', 'เปิดหน้าตั้งค่าปัจจุบัน', self.settings),
+            ('settings', '', None),
         ):
             page = (self.review_queue_page if page_id == 'review' else self.history_page if page_id == 'history'
-                    else self.problems_page if page_id == 'problems' else self._placeholder_page(page_id, action_text, action))
+                    else self.problems_page if page_id == 'problems' else self.settings_page)
             self._page_indexes[page_id] = self.page_host.addWidget(page)
         self.navigate_to('overview')
         self.refresh_overview()
@@ -335,6 +342,15 @@ class MainWindow(QMainWindow):
         """Switch presentation pages without touching runtime or payroll state."""
         if page_id not in self._page_indexes:
             raise ValueError(f'Unknown application page: {page_id}')
+        if (hasattr(self, 'settings_page') and self.page_host.currentWidget() is self.settings_page
+                and page_id != 'settings' and self.settings_page.is_dirty()):
+            answer = QMessageBox.question(
+                self, 'มีการเปลี่ยนแปลงที่ยังไม่บันทึก',
+                'ต้องการละทิ้งการเปลี่ยนแปลงการตั้งค่าหรือไม่?',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return False
         self.page_host.setCurrentIndex(self._page_indexes[page_id])
         for candidate, button in self.navigation_buttons.items():
             button.setChecked(candidate == page_id)
@@ -346,7 +362,10 @@ class MainWindow(QMainWindow):
             self.history_page.refresh()
         elif page_id == 'problems':
             self.problems_page.refresh()
+        elif page_id == 'settings':
+            self.settings_page.load()
         self.navigation_buttons[page_id].setFocus(Qt.OtherFocusReason)
+        return True
 
     def show_legacy_workflow(self):
         """Keep every unmigrated payroll operation reachable during D.2."""
@@ -972,16 +991,57 @@ class MainWindow(QMainWindow):
 
     def settings(self):
         self.navigate_to('settings')
-        from app.ui.setup_wizard import SetupWizard
-        wizard = SetupWizard(self.workflow, self)
-        if wizard.exec() == QDialog.Accepted:
-            self.manual_recovery.setVisible(False)
-            if self.runtime:
-                # Folder settings may have changed, but Settings must never
-                # turn paused monitoring back on merely because it was saved.
-                # reconfigure() preserves the persisted watch_enabled intent.
-                self.runtime.reconfigure()
-        return
+
+    def _save_settings(self, values):
+        """Persist folders, then perform only the explicit startup request.
+
+        A Task Scheduler failure is deliberately not disguised as a rollback:
+        the persisted folder configuration remains visible as a partial result.
+        """
+        try:
+            self.workflow.configure(values['attendance_folder'], values['payroll_folder'], values['template_path'])
+        except Exception as exc:
+            self.settings_page.operation_finished(f'ยังไม่ได้บันทึกโฟลเดอร์ทำงาน: {exc}', success=False, reload=False)
+            return False
+
+        messages, success = ['บันทึกโฟลเดอร์ทำงานแล้ว'], True
+        if self.runtime:
+            # reconfigure preserves watch_enabled; it must never act like an
+            # implicit resume_monitoring call from the old modal Settings UI.
+            if not self.runtime.reconfigure():
+                success = False
+                messages.append('บันทึกแล้ว แต่ไม่สามารถนำการตั้งค่าใหม่ไปใช้กับการเฝ้าดูไฟล์ได้')
+        self.manual_recovery.setVisible(False)
+
+        status = self.startup_service.validate()
+        desired, result = bool(values['start_with_windows']), None
+        if desired and not status.enabled:
+            if status.state.name == 'NEEDS_REPAIR':
+                success = False
+                messages.append('Start with Windows ยังต้องซ่อมแซม; กรุณากดปุ่มซ่อมแซมโดยชัดแจ้ง')
+            else:
+                result = self.startup_service.install()
+        elif not desired and status.installed:
+            result = self.startup_service.remove()
+        if result is not None:
+            if result.success:
+                messages.append('อัปเดต Start with Windows แล้ว')
+            else:
+                success = False
+                messages.append(f'บันทึกโฟลเดอร์แล้ว แต่ Start with Windows ไม่สำเร็จ: {result.status.message}')
+        self.settings_page.operation_finished(' • '.join(messages), success=success)
+        return success
+
+    def _repair_startup(self):
+        """Repair is a separately confirmed, explicit user action."""
+        result = self.startup_service.repair()
+        if result.success:
+            self.settings_page.operation_finished('ซ่อมแซม Start with Windows แล้ว', success=True)
+            return True
+        self.settings_page.operation_finished(
+            f'ไม่สามารถซ่อมแซม Start with Windows ได้: {result.status.message}', success=False,
+        )
+        return False
 
     def _resume_monitoring_after_first_setup(self):
         """Keep first-run convenience without overriding an explicit pause."""
