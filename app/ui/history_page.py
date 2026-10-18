@@ -1,5 +1,5 @@
 """Bounded database-backed audit history page."""
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.ui.history_model import HistoryViewModel
@@ -35,6 +35,7 @@ class HistoryPage(QWidget):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.itemDoubleClicked.connect(lambda *_: self.activate_current())
+        self.table.installEventFilter(self)
         layout.addWidget(self.table, 1)
         self.state = QLabel()
         self.state.setWordWrap(True)
@@ -118,3 +119,9 @@ class HistoryPage(QWidget):
     def activate_current(self):
         event_id = self.current_event_id()
         if event_id is not None: self.event_activated.emit(event_id)
+
+    def eventFilter(self, watched, event):
+        if watched is self.table and event.type() == QEvent.KeyPress and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.activate_current()
+            return True
+        return super().eventFilter(watched, event)
