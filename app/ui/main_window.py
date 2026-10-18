@@ -194,6 +194,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.table)
         actions = QHBoxLayout()
         self.read_button = QPushButton('อ่านข้อมูล / คำนวณฉบับร่าง')
+        self.read_button.setProperty('role', 'primary')
         self.read_button.clicked.connect(self.read_draft)
         self.review_button = QPushButton('รายการที่ต้องตรวจสอบ')
         self.review_button.clicked.connect(self.review)
@@ -463,6 +464,7 @@ class MainWindow(QMainWindow):
         self.update_buttons()
 
     def review(self):
+        self.navigate_to('review')
         if self.draft:
             ReviewCenter(self.service, self.draft, actor=self.actor.text(), on_changed=self.read_draft, parent=self).exec()
 
@@ -625,6 +627,7 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def history(self):
+        self.navigate_to('history')
         dialog = QDialog(self)
         dialog.setWindowTitle('ประวัติการตรวจสอบ')
         dialog.resize(880, 490)
@@ -640,6 +643,7 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def settings(self):
+        self.navigate_to('settings')
         from app.ui.setup_wizard import SetupWizard
         wizard = SetupWizard(self.workflow, self)
         if wizard.exec() == QDialog.Accepted:
@@ -689,6 +693,7 @@ class MainWindow(QMainWindow):
                 self.service.repo.set_setting('watch_enabled', start.isChecked())
 
     def open_copy(self, kind):
+        self.navigate_to('overview')
         path = Path(getattr(self, kind).text())
         try:
             development_target(path)

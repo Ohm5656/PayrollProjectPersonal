@@ -1,5 +1,7 @@
+from app.services.automation_runtime import AutomationRuntime
 from app.services.payroll_service import PayrollService
 from app.ui.main_window import MainWindow
+from app.ui.tray import PayrollTray
 from tests.unit.test_ui import qt_app, draft_case
 
 
@@ -29,4 +31,58 @@ def test_navigation_changes_only_presentation_state(qt_app, draft_case):
         assert window.navigation_buttons[page_id].isChecked()
         assert window.page_host.currentIndex() == window._page_indexes[page_id]
         assert service.repo.setting('watch_enabled') is False
+    window.close()
+
+
+def test_compatibility_controls_remain_in_overview_page(qt_app, draft_case):
+    window = MainWindow(PayrollService(draft_case[0]))
+
+    for control in (
+        window.read_button, window.review_button, window.profile_button, window.confirm_button,
+        window.write_button, window.slips_button, window.month8_uat_button, window.copy_button,
+        window.table,
+    ):
+        assert control.parentWidget() is not None
+        assert window.compatibility_page.isAncestorOf(control)
+    assert window.read_button.property('role') == 'primary'
+    window.close()
+
+
+def test_tray_shortcuts_keep_public_window_entry_points(qt_app, draft_case, monkeypatch):
+    runtime = AutomationRuntime(PayrollService(draft_case[0]), qt_app)
+    window = MainWindow(runtime.service, runtime=runtime)
+    tray = PayrollTray(runtime, qt_app, show_main_window=lambda _: window.show(), get_window=lambda: window)
+    calls = []
+    monkeypatch.setattr(window, 'review', lambda: calls.append('review'))
+    monkeypatch.setattr(window, 'history', lambda: calls.append('history'))
+    monkeypatch.setattr(window, 'settings', lambda: calls.append('settings'))
+    monkeypatch.setattr(window, 'open_copy', lambda kind: calls.append(kind))
+
+    tray.open_review()
+    tray.open_history()
+    tray.open_settings()
+    tray.open_copy('attendance')
+    tray.open_copy('payroll')
+
+    assert calls == ['review', 'history', 'settings', 'attendance', 'payroll']
+    assert runtime.watcher is None
+    tray.hide()
+    window.close()
+
+
+def test_compatibility_routing_does_not_resume_monitoring(qt_app, draft_case, monkeypatch):
+    service = PayrollService(draft_case[0])
+    runtime = AutomationRuntime(service, qt_app)
+    service.repo.set_setting('watch_enabled', False)
+    window = MainWindow(service, runtime=runtime)
+    resume_calls = []
+    monkeypatch.setattr(runtime, 'resume_monitoring', lambda: resume_calls.append(True))
+
+    window.navigate_to('settings')
+    window.navigate_to('review')
+    window.open_copy('attendance')
+
+    assert resume_calls == []
+    assert runtime.watcher is None
+    assert service.repo.setting('watch_enabled') is False
     window.close()
