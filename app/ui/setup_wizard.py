@@ -56,13 +56,13 @@ class SetupWizard(QDialog):
         if self.start_with_windows.isChecked() and not status.enabled:
             result = self.startup_service.install()
             if not result.success:
-                self.error.setText('ไม่สามารถตั้งค่าให้เปิดพร้อม Windows ได้ กรุณาตรวจสอบการตั้งค่าแล้วลองใหม่')
+                self.error.setText('บันทึกโฟลเดอร์แล้ว แต่ไม่สามารถตั้งค่าให้เปิดพร้อม Windows ได้ กรุณาตรวจสอบการตั้งค่าแล้วลองใหม่')
                 self.refresh_startup_status()
                 return
         elif not self.start_with_windows.isChecked() and status.installed:
             result = self.startup_service.remove()
             if not result.success:
-                self.error.setText('ไม่สามารถปิดการเริ่มพร้อม Windows ได้ กรุณาลองใหม่')
+                self.error.setText('บันทึกโฟลเดอร์แล้ว แต่ไม่สามารถปิดการเริ่มพร้อม Windows ได้ กรุณาลองใหม่')
                 self.refresh_startup_status()
                 return
         self.accept()

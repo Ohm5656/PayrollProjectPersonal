@@ -549,8 +549,17 @@ class MainWindow(QMainWindow):
         if wizard.exec() == QDialog.Accepted:
             self.manual_recovery.setVisible(False)
             if self.runtime:
-                self.runtime.resume_monitoring()
+                # Folder settings may have changed, but Settings must never
+                # turn paused monitoring back on merely because it was saved.
+                # reconfigure() preserves the persisted watch_enabled intent.
+                self.runtime.reconfigure()
         return
+
+    def _resume_monitoring_after_first_setup(self):
+        """Keep first-run convenience without overriding an explicit pause."""
+        if self.runtime and self.service.repo.setting('watch_enabled', None) is None:
+            return self.runtime.resume_monitoring()
+        return False
 
     def first_run_setup(self):
         """Show setup only on an interactive first launch, never in Qt tests."""
@@ -563,8 +572,7 @@ class MainWindow(QMainWindow):
         wizard = SetupWizard(self.workflow, self)
         if wizard.exec() == QDialog.Accepted:
             self.manual_recovery.setVisible(False)
-            if self.runtime:
-                self.runtime.resume_monitoring()
+            self._resume_monitoring_after_first_setup()
 
     def legacy_settings(self):
         dialog = QDialog(self)
