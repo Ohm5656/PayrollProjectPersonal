@@ -35,9 +35,12 @@ QLabel[role="pageTitle"] {{ font-size: 24px; font-weight: 600; }}
 QLabel[role="sectionTitle"] {{ font-size: 18px; font-weight: 600; }}
 QLabel[role="supporting"] {{ color: {t['text_muted']}; font-size: 13px; }}
 QLabel[semantic="warning"] {{ color: {t['warning']}; font-weight: 600; }}
+QLabel[semantic="error"] {{ color: {t['danger']}; font-weight: 600; }}
 QWidget#sidebar {{ background: {t['surface']}; border-right: 1px solid {t['border']}; }}
 QFrame[role="section"] {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 8px; }}
-QPushButton {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 6px; padding: 8px 12px; min-height: 20px; }}
+QGroupBox {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 8px; margin-top: 8px; padding: 10px; font-weight: 600; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 10px; padding: 0 4px; }}
+QPushButton {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 6px; padding: 8px 12px; min-height: 22px; }}
 QPushButton:hover {{ background: {t['surface_subtle']}; border-color: {t['primary']}; }}
 QPushButton:pressed {{ background: {t['border']}; }}
 QPushButton:disabled {{ color: {t['text_muted']}; background: {t['surface_subtle']}; border-color: {t['border']}; }}
@@ -51,8 +54,12 @@ QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {t['border']}; border-radius: 3px; background: {t['surface']}; }}
 QCheckBox::indicator:checked {{ background: {t['primary']}; border-color: {t['primary']}; }}
 QTableWidget {{ background: {t['surface']}; alternate-background-color: {t['surface_subtle']}; border: 1px solid {t['border']}; border-radius: 8px; gridline-color: {t['border']}; selection-background-color: {t['surface_subtle']}; selection-color: {t['text']}; }}
+QTableWidget::item {{ padding: 4px 6px; }}
+QTableWidget::item:selected {{ background: #DCEBFA; color: {t['text']}; border: 1px solid {t['primary']}; }}
 QHeaderView::section {{ background: {t['surface_subtle']}; border: 0; border-bottom: 1px solid {t['border']}; color: {t['text']}; font-weight: 600; padding: 8px; }}
 QScrollArea {{ border: 0; background: transparent; }}
+QScrollBar:vertical {{ background: transparent; width: 12px; margin: 2px; }}
+QScrollBar::handle:vertical {{ background: {t['border']}; border-radius: 5px; min-height: 28px; }}
 QStatusBar {{ background: {t['surface']}; border-top: 1px solid {t['border']}; color: {t['text_muted']}; }}
 QMenu {{ background: {t['surface']}; border: 1px solid {t['border']}; padding: 4px; }}
 QMenu::item {{ padding: 7px 24px 7px 12px; border-radius: 4px; }}

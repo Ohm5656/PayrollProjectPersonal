@@ -23,6 +23,7 @@ class PageHeader(QWidget):
         layout.setSpacing(4)
         self.title = QLabel(title)
         self.title.setProperty('role', 'pageTitle')
+        self.title.setAccessibleName('ชื่อหน้าปัจจุบัน')
         self.subtitle = QLabel(subtitle)
         self.subtitle.setProperty('role', 'supporting')
         self.subtitle.setWordWrap(True)
@@ -40,6 +41,7 @@ class StatusBadge(QFrame):
     def __init__(self, text='', parent=None):
         super().__init__(parent)
         self.setProperty('role', 'section')
+        self.setAccessibleName(text)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
         self.label = QLabel(text)
@@ -48,6 +50,7 @@ class StatusBadge(QFrame):
 
     def setText(self, text):
         self.label.setText(text)
+        self.setAccessibleName(text)
 
     def text(self):
         return self.label.text()
@@ -61,9 +64,10 @@ class SectionContainer(QFrame):
         self.layout.setContentsMargins(16, 16, 16, 16)
         self.layout.setSpacing(12)
         if title:
-            label = QLabel(title)
-            label.setProperty('role', 'sectionTitle')
-            self.layout.addWidget(label)
+            self.title = QLabel(title)
+            self.title.setProperty('role', 'sectionTitle')
+            self.title.setWordWrap(True)
+            self.layout.addWidget(self.title)
 
     def addWidget(self, widget, stretch=0, alignment=Qt.Alignment()):
         self.layout.addWidget(widget, stretch, alignment)
