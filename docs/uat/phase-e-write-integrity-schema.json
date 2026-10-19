@@ -1,0 +1,26 @@
+{
+  "environment": "synthetic-only",
+  "workspace": "test_workspace/uat_synthetic/<unique>",
+  "real_company_data": false,
+  "excel_com": "NOT_VERIFIED",
+  "operations": [
+    {
+      "case_id": "E-WRITE-01",
+      "operation": "build_plan",
+      "target_scope": "synthetic_uat_only",
+      "source_hash": "MATCH_REQUIRED",
+      "formula_check": "PROTECTED",
+      "payslip_check": "PASS"
+    },
+    {
+      "case_id": "E-RECOVERY-01",
+      "operation": "gateway_failure_before_open",
+      "original_target_hash": "RECORDED_BY_TEST",
+      "backup_hash": "EQUALS_ORIGINAL",
+      "result_hash": null,
+      "target_unchanged": true,
+      "staged_evidence": "RETAINED_IN_SYNTHETIC_WORKSPACE",
+      "status": "PASS"
+    }
+  ]
+}
