@@ -128,7 +128,7 @@ def reserved_copy(path):
 
 
 class ExcelGateway:
-    def __init__(self):
+    def __init__(self, *, lifecycle_root=None):
         self.app = None
         self.pid = None
         self.pre_existing = {}
@@ -142,12 +142,13 @@ class ExcelGateway:
         self.process_exit_code=None
         self.events=[]
         self.thread_id=None
+        self.lifecycle_root = Path(lifecycle_root) if lifecycle_root is not None else TEST_ROOT / 'com_lifecycle'
 
     def record(self,event,**details):
         entry={'event':event,'pid':self.pid,'creation_time':self.creation_time,'thread_id':threading.get_ident(),
                'timestamp':datetime.now(timezone.utc).isoformat(),**details}
         self.events.append(entry)
-        path=development_target(TEST_ROOT/'com_lifecycle/events.jsonl')
+        path=development_target(self.lifecycle_root/'events.jsonl')
         path.parent.mkdir(parents=True,exist_ok=True)
         with path.open('a',encoding='utf-8') as stream:stream.write(json.dumps(entry,ensure_ascii=False)+'\n')
         logging.getLogger('ntp').info('Owned Excel lifecycle %s pid=%s',event,self.pid)

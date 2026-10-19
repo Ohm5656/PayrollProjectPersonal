@@ -141,7 +141,8 @@ def _payslip_sheets(book, year: int, month: int):
         sheet["A20"] = "period"
         sheet["B20"] = f"{THAI_MONTHS[month - 1]} {year}"
         sheet["A21"] = "(date)"
-        sheet["B21"] = date(year, month, monthrange(year, month)[1]).isoformat()
+        sheet["B21"] = date(year, month, monthrange(year, month)[1])
+        sheet["B21"].number_format = "yyyy-mm-dd"
 
 
 def create_synthetic_excel_fixture(root: Path | None = None, *, year=2026, month=9):
