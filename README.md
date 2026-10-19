@@ -49,6 +49,31 @@ python -X utf8 -m app.main --smoke-test
 
 Excel integration tests require Microsoft Excel and use test-workspace copies. The application is configured for copies-only workflows; do not use it to modify production payroll files.
 
+## Windows test-candidate build
+
+The deployment candidate is an onedir **QA-only** executable. It never starts
+normal payroll mode: its frozen entry point always requests `--qa-ui`, creates
+synthetic data in its own `test_workspace`, and leaves monitoring disabled.
+It is not a production release.
+
+```powershell
+Set-Location 'C:\path\to\NTP payroll'
+& '.\.venv\Scripts\python.exe' -m pip install 'pyinstaller>=6.16,<7'
+& '.\packaging\build_exe.ps1'
+& '.\dist\NTP Payroll Assistant - Test Candidate\NTP Payroll Assistant - Test Candidate.exe'
+```
+
+The build script prints the executable SHA-256. Generated `build/`, `dist/`
+and `artifacts/` folders are intentionally ignored by Git. Microsoft Excel
+Desktop remains an external prerequisite for real COM operations; packaged COM
+must be verified separately against fictional workbooks only.
+
+`packaging/installer/ntp_payroll.iss` is a per-user, unsigned Inno Setup
+definition. Compile it only after installing Inno Setup, and do not execute an
+installer outside an approved disposable test environment. It neither launches
+the application nor creates a Scheduled Task. No production activation flag,
+configuration, data import or production writing exists in this project.
+
 ## Windows sign-in startup (manual verification)
 
 Windows startup is opt-in. In **Settings**, select **Start with Windows** and save; this creates one current-user Task Scheduler task named `NTP Payroll Assistant`. It launches the project virtual environment's absolute `pythonw.exe` path with `-X utf8 -m app.main --startup`, so no console window is expected.
