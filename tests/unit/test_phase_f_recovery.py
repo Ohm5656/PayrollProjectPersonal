@@ -19,3 +19,9 @@ def test_phase_f_sqlite_backup_api_produces_integrity_checked_disposable_snapsho
     source = Database(workbook_workspace / 'source.db').path
     restored = sqlite_snapshot(source, workbook_workspace / 'restore.db')
     assert restored.is_file()
+
+
+def test_phase_g_snapshot_rejects_external_source(tmp_path, workbook_workspace):
+    source = tmp_path / 'private.db'; source.write_bytes(b'not permitted')
+    with pytest.raises(SafetyError):
+        sqlite_snapshot(source, workbook_workspace / 'restore.db')

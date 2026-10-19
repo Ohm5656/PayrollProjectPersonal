@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 
 from app.safety import TEST_ROOT
+from app.db.migrations import MIGRATIONS
 from app.services.monthly_workflow import validate_workflow_configuration
 
 
@@ -53,8 +54,9 @@ class ReadinessService:
             uri = self.database_path.resolve().as_uri() + '?mode=ro'
             with sqlite3.connect(uri, uri=True) as con:
                 integrity = con.execute('PRAGMA integrity_check').fetchone()[0]
-                versions = con.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0]
-            status = 'PASS' if integrity == 'ok' else 'FAIL'
+                versions = {row[0] for row in con.execute('SELECT version FROM schema_migrations')}
+            known = {version for version, _ in MIGRATIONS}
+            status = 'PASS' if integrity == 'ok' and versions == known else 'FAIL'
             return ReadinessCheck('DATABASE_SCHEMA', status, 'ฐานข้อมูลทดสอบตรวจสอบความสมบูรณ์แล้ว' if status == 'PASS' else 'ฐานข้อมูลทดสอบมีปัญหา', 'หยุดและตรวจสอบฐานข้อมูล' if status == 'FAIL' else 'ใช้เฉพาะฐานข้อมูลทดสอบ', f'integrity={integrity}; migrations={versions}')
         except Exception as exc:
             return ReadinessCheck('DATABASE_SCHEMA', 'NOT_VERIFIED', 'ไม่สามารถตรวจสอบฐานข้อมูลแบบอ่านอย่างเดียว', 'ห้ามเปิดฐานข้อมูลปกติเพื่อตรวจสอบ', type(exc).__name__)
@@ -69,7 +71,8 @@ class ReadinessService:
 
     def _monitoring(self):
         state = str(getattr(self.runtime, 'state', 'UNKNOWN')) if self.runtime else 'UNKNOWN'
-        return ReadinessCheck('MONITORING_STATE', 'WARNING' if state not in {'DISABLED', 'UNKNOWN'} else 'PASS', 'การเฝ้าดูไฟล์หยุดอยู่' if state in {'DISABLED', 'UNKNOWN'} else 'พบการเฝ้าดูไฟล์กำลังทำงาน', 'หยุดการเฝ้าดูไฟล์ก่อนตรวจความพร้อม' if state not in {'DISABLED', 'UNKNOWN'} else 'ไม่เปิดการเฝ้าดูไฟล์อัตโนมัติ', state)
+        status = 'PASS' if state == 'DISABLED' else 'WARNING' if state in {'WATCHING', 'PROCESSING'} else 'NOT_VERIFIED'
+        return ReadinessCheck('MONITORING_STATE', status, 'การเฝ้าดูไฟล์หยุดอยู่' if status == 'PASS' else 'ไม่สามารถยืนยันสถานะการเฝ้าดูไฟล์' if status == 'NOT_VERIFIED' else 'พบการเฝ้าดูไฟล์กำลังทำงาน', 'หยุดการเฝ้าดูไฟล์ก่อนตรวจความพร้อม' if status != 'PASS' else 'ไม่เปิดการเฝ้าดูไฟล์อัตโนมัติ', state)
 
     def _excel(self):
         if self.excel_probe is None:

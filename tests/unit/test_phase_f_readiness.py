@@ -15,3 +15,4 @@ def test_phase_f_readiness_reads_only_isolated_database_and_reports_thai(workboo
     assert checks['DATABASE_SCHEMA'].status == 'PASS'
     assert checks['EXCEL_COM'].summary_th.startswith('Excel')
     assert all(check.read_only for check in report.checks)
+    assert checks['MONITORING_STATE'].status == 'NOT_VERIFIED'

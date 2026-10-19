@@ -3,7 +3,7 @@ from pathlib import Path
 import sqlite3
 
 from app.excel.workbook_source import file_hash
-from app.safety import SafetyError, development_target
+from app.safety import SafetyError, TEST_ROOT, development_target
 
 
 def restore_workbook_copy(backup, destination, expected_hash):
@@ -20,7 +20,9 @@ def restore_workbook_copy(backup, destination, expected_hash):
 
 
 def sqlite_snapshot(source, destination):
-    source, destination = Path(source), development_target(destination)
+    source, destination = Path(source).resolve(), development_target(destination)
+    if TEST_ROOT.resolve() not in source.parents:
+        raise SafetyError('Snapshot source must remain inside test_workspace')
     if not source.is_file() or destination.exists():
         raise SafetyError('Snapshot source is missing or destination is not a fresh isolated file')
     destination.parent.mkdir(parents=True, exist_ok=True)
