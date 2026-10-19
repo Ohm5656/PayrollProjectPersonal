@@ -1,0 +1,18 @@
+#define AppName "NTP Payroll Assistant - Test Candidate"
+#define AppVersion "0.0.0-test"
+#define AppExeName "NTP Payroll Assistant - Test Candidate.exe"
+[Setup]
+AppId={{9A405ED8-9820-45F4-A7C8-CANDIDATEONLY}}
+AppName={#AppName}
+AppVersion={#AppVersion}
+DefaultDirName={localappdata}\NTP Payroll Assistant Test Candidate
+DefaultGroupName={#AppName}
+PrivilegesRequired=lowest
+DisableProgramGroupPage=yes
+UninstallDisplayName={#AppName}
+[Files]
+Source: "..\..\dist\NTP Payroll Assistant - Test Candidate\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+[Icons]
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+[Run]
+; Deliberately no automatic launch, monitoring or startup registration.
