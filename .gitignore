@@ -9,3 +9,6 @@ test_workspace/
 logs/
 backups/
 data/*.db
+build/
+dist/
+artifacts/

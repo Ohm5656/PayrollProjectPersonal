@@ -4,6 +4,7 @@ Widgets consume named object/property selectors instead of carrying their own
 colours.  Runtime and payroll services intentionally do not appear here.
 """
 from PySide6.QtGui import QFont
+from pathlib import Path
 
 
 TOKENS = {
@@ -28,6 +29,7 @@ FONT_FAMILIES = ('Segoe UI', 'Leelawadee UI', 'Tahoma', 'sans-serif')
 def stylesheet():
     """Return the application QSS built only from the shared token set."""
     t = TOKENS
+    checkmark = Path(__file__).with_name('checkmark.svg').resolve().as_uri()
     return f"""
 QMainWindow, QDialog {{ background: {t['canvas']}; color: {t['text']}; }}
 QWidget {{ color: {t['text']}; font-size: 14px; }}
@@ -52,9 +54,9 @@ QPushButton:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTableWidge
 QLineEdit, QComboBox, QSpinBox {{ background: {t['surface']}; border: 1px solid {t['border']}; border-radius: 6px; padding: 6px 8px; min-height: 20px; }}
 QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {t['border']}; border-radius: 3px; background: {t['surface']}; }}
-QCheckBox::indicator:checked {{ background: {t['primary']}; border-color: {t['primary']}; image: url(app/ui/checkmark.svg); }}
+QCheckBox::indicator:checked {{ background: {t['primary']}; border-color: {t['primary']}; image: url({checkmark}); }}
 QCheckBox::indicator:disabled {{ background: {t['surface_subtle']}; border-color: {t['border']}; }}
-QCheckBox::indicator:checked:disabled {{ background: {t['text_muted']}; image: url(app/ui/checkmark.svg); }}
+QCheckBox::indicator:checked:disabled {{ background: {t['text_muted']}; image: url({checkmark}); }}
 QTableWidget {{ background: {t['surface']}; alternate-background-color: {t['surface_subtle']}; border: 1px solid {t['border']}; border-radius: 8px; gridline-color: {t['border']}; selection-background-color: {t['surface_subtle']}; selection-color: {t['text']}; }}
 QTableWidget::item {{ padding: 4px 6px; }}
 QTableWidget::item:selected {{ background: #DCEBFA; color: {t['text']}; border: 1px solid {t['primary']}; }}

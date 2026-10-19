@@ -2,10 +2,15 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import sys
 
 from app.excel.workbook_source import discover_workbooks, file_hash
 
-ROOT = Path(__file__).resolve().parents[1]
+_FROZEN_CANDIDATE = bool(getattr(sys, 'frozen', False))
+# A frozen candidate has no reliable project ``__file__`` root.  Its only
+# writable state remains a sibling test workspace next to the onedir EXE; the
+# normal application never uses this path because frozen execution is QA-only.
+ROOT = Path(sys.executable).resolve().parent if _FROZEN_CANDIDATE else Path(__file__).resolve().parents[1]
 REFERENCE_ROOT = ROOT / 'reference_data'
 TEST_ROOT = ROOT / 'test_workspace'
 MASTER_TEMPLATE_RELATIVE = 'template/ฟอร์มเปล่ารายเดือน.xlsx'

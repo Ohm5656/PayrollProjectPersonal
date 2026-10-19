@@ -37,6 +37,8 @@ def main():
     parser.add_argument('--smoke-test', action='store_true')
     parser.add_argument('--qa-ui', action='store_true', help='Launch an isolated synthetic-only manual UI QA session')
     args = parser.parse_args()
+    if getattr(sys, 'frozen', False) and not args.qa_ui:
+        parser.error('The packaged test candidate requires --qa-ui and has no normal-payroll mode')
     if args.qa_ui and (args.startup or args.minimized):
         parser.error('--qa-ui cannot be combined with startup or minimized launch modes')
     if args.smoke_test:
