@@ -14,14 +14,14 @@ with SHA-256. The candidate was launched with `--smoke-test`; it exited with
 code 0 and created state only under:
 
 ```text
-dist/NTP Payroll Assistant - Test Candidate/test_workspace/qa_sessions/manual_ui/
+%LOCALAPPDATA%/NTP Payroll Assistant Test Candidate/State/test_workspace/qa_sessions/manual_ui/
 ```
 
 The frozen entry point injects `--qa-ui`; `app.main` rejects a frozen launch
 without it. This prevents fallback to the normal application database or
-reference-workbook startup path. Its test workspace is a descendant of the
-candidate executable directory and continues to be checked by
-`development_target()`.
+reference-workbook startup path. Its test workspace is a fixed, validated
+candidate-only path under `%LOCALAPPDATA%`, separate from installed immutable
+application files, and continues to be checked by `development_target()`.
 
 ## Results
 

@@ -9,8 +9,8 @@
 
 ## เปิดและยืนยันโหมดทดสอบ
 
-หลัง build ให้เปิด `NTP Payroll Assistant - Test Candidate.exe` จากโฟลเดอร์
-`dist` โปรแกรมต้องแสดงคำว่า QA/โหมดทดสอบ และมีข้อมูลสมมติเท่านั้น. หากไม่
+หลัง build ให้เปิด `NTP Payroll Assistant - Test Candidate.exe` จาก path ที่
+script รายงานใต้ `dist\\build-<id>` โปรแกรมต้องแสดงคำว่า QA/โหมดทดสอบ และมีข้อมูลสมมติเท่านั้น. หากไม่
 เห็นสถานะดังกล่าว ให้หยุดทดสอบและแจ้งผู้พัฒนา ไม่ต้องลองเปิดไฟล์เงินจริง.
 
 ## ตรวจหน้าจอและ Tray
@@ -27,7 +27,8 @@
 เมื่อมี Inno Setup build สำเร็จแล้วเท่านั้น ให้ตรวจ metadata และ shortcut
 ใน Windows disposable account/VM. ห้ามติดตั้งทับ application จริง. ตรวจว่า
 installer ไม่เปิดโปรแกรม ไม่สร้าง Scheduled Task และ uninstall ไม่ลบฐานข้อมูล
-หรือหลักฐาน backup โดยอัตโนมัติ.
+หรือหลักฐาน backup ใต้ `%LOCALAPPDATA%\\NTP Payroll Assistant Test Candidate\\State`
+โดยอัตโนมัติ.
 
 ## Excel และผลเงินเดือน
 

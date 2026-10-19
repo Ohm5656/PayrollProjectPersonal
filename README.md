@@ -60,19 +60,23 @@ It is not a production release.
 Set-Location 'C:\path\to\NTP payroll'
 & '.\.venv\Scripts\python.exe' -m pip install 'pyinstaller>=6.16,<7'
 & '.\packaging\build_exe.ps1'
-& '.\dist\NTP Payroll Assistant - Test Candidate\NTP Payroll Assistant - Test Candidate.exe'
 ```
 
-The build script prints the executable SHA-256. Generated `build/`, `dist/`
-and `artifacts/` folders are intentionally ignored by Git. Microsoft Excel
+The build script creates a fresh `dist\build-<id>` directory and prints its
+exact EXE path and SHA-256; it never overwrites a prior candidate directory.
+Launch the reported EXE. Generated `build/`, `dist/` and `artifacts/` folders
+are intentionally ignored by Git. Microsoft Excel
 Desktop remains an external prerequisite for real COM operations; packaged COM
 must be verified separately against fictional workbooks only.
 
 `packaging/installer/ntp_payroll.iss` is a per-user, unsigned Inno Setup
-definition. Compile it only after installing Inno Setup, and do not execute an
-installer outside an approved disposable test environment. It neither launches
-the application nor creates a Scheduled Task. No production activation flag,
-configuration, data import or production writing exists in this project.
+definition. `build_installer.ps1` first stages only the allowlisted EXE and
+`_internal` payload, then requires Inno Setup. Compile it only after installing
+Inno Setup with explicit approval, and do not execute an installer outside an
+approved disposable test environment. It neither launches the application nor
+creates a Scheduled Task. Candidate state is preserved separately beneath
+`%LOCALAPPDATA%\NTP Payroll Assistant Test Candidate\State`. No production
+activation flag, configuration, data import or production writing exists.
 
 ## Windows sign-in startup (manual verification)
 

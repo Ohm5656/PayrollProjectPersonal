@@ -11,7 +11,7 @@
 | Phase F backup ownership/retention and final risk review | PENDING | owner-approved operational policy |
 | Phase G frozen EXE native UI/tray/keyboard/DPI | DEFERRED | manual QA of generated candidate |
 | Phase G installer compile/install/upgrade/uninstall | DEFERRED | Inno Setup plus disposable installation rehearsal |
-| Phase G candidate data retention | DEFERRED | inspect uninstall behavior in disposable state |
+| Phase G candidate data retention | DEFERRED | inspect that uninstall preserves `%LOCALAPPDATA%` candidate state in a disposable installation |
 | Phase G packaged Excel COM | DEFERRED | isolated fictional workbook and owned Excel process |
 | Phase G clean-machine compatibility | DEFERRED | Windows test machine without project Python |
 | Phase G code signing/security warnings | PENDING | verified signing decision; current candidate is unsigned |

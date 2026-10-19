@@ -8,17 +8,18 @@ The reproducible PyInstaller onedir build completed on Windows 11
 | Item | Value |
 | --- | --- |
 | Label | NTP Payroll Assistant - Test Candidate |
-| EXE | `dist/NTP Payroll Assistant - Test Candidate/NTP Payroll Assistant - Test Candidate.exe` |
-| Size | 51,465,737 bytes |
-| SHA-256 | `57EC7E560A94693A1125B0B3795881A7F9B4383B7397A5ED5D7704FCC68E2315` |
-| Build source revision | `74329bb` (candidate code; documentation follows) |
+| EXE | `dist/build-fadcfcd335fa46d69208f5e232a3c7fd/NTP Payroll Assistant - Test Candidate/NTP Payroll Assistant - Test Candidate.exe` |
+| Size | 51,466,927 bytes |
+| SHA-256 | `2186A3F37A9A8C5F9A57AFD682B824948DD3DA9C6F3AE35088D3E182992CED40` |
+| Build source revision | G.6 working tree (documentation follows) |
 | Signature | unsigned |
 | Excel requirement | Microsoft Excel Desktop remains external for COM |
 
 The EXE is intentionally absent from Git. It is a QA-only candidate: frozen
-launch forces `--qa-ui`, data/logs/SQLite/IPC remain in the candidate's own
-validated `test_workspace`, and no normal payroll or reference-data fallback
-is available.
+launch forces `--qa-ui`, and data/logs/SQLite/IPC remain in the fixed validated
+`%LOCALAPPDATA%/NTP Payroll Assistant Test Candidate/State/test_workspace`
+instead of the application directory. No normal payroll or reference-data
+fallback is available.
 
 ## Installer
 
