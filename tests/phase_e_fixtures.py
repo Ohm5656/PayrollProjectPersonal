@@ -4,6 +4,7 @@ These builders never read or copy a source workbook.  Callers must provide a
 new child of ``test_workspace/uat_synthetic`` so that generated workbooks and
 any later writer artefacts cannot overlap normal, QA, or historical fixtures.
 """
+from calendar import monthrange
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
@@ -22,6 +23,9 @@ PEOPLE = (
     ("Chai", "Chai Fixture"),
 )
 
+THAI_MONTHS = ("มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม")
+
 
 def uat_root(label="case"):
     """Return a unique, non-existing safe UAT directory without deleting data."""
@@ -36,20 +40,20 @@ def _header(field):
     return next(text for text, value in HEADERS.items() if value == field)
 
 
-def _attendance(path: Path):
+def _attendance(path: Path, year: int, month: int):
     book = Workbook()
     book.remove(book.active)
     for sheet_name, full_name in PEOPLE:
         sheet = book.create_sheet(sheet_name)
         sheet["A1"] = "ชื่อ"
         sheet["B1"] = full_name
-        sheet["J1"] = datetime(2026, 9, 1)
+        sheet["J1"] = datetime(year, month, 1)
         headers = ("date", "weekday", "work", "location", "clock_in", "clock_out", "ot", "allowance", "travel", "note")
         for column, field in enumerate(headers, 1):
             sheet.cell(3, column, _header(field))
-        for day in range(1, 31):
+        for day in range(1, monthrange(year, month)[1] + 1):
             row = day + 3
-            sheet.cell(row, 1, date(2026, 9, day))
+            sheet.cell(row, 1, date(year, month, day))
             sheet.cell(row, 2, "วันทำงาน")
             sheet.cell(row, 3, "Synthetic office")
             sheet.cell(row, 4, "UAT site")
@@ -62,11 +66,12 @@ def _attendance(path: Path):
     book.close()
 
 
-def _payroll(path: Path):
+def _payroll(path: Path, year: int, month: int):
     book = Workbook()
     sheet = book.active
     sheet.title = "คิดค่าจ้าง"
-    sheet["A1"] = "ประจำเดือน กันยายน 2569 จ่ายวันที่ 30 กันยายน 2569"
+    buddhist_year = year + 543
+    sheet["A1"] = f"ประจำเดือน {THAI_MONTHS[month - 1]} {buddhist_year} จ่ายวันที่ 30 {THAI_MONTHS[month - 1]} {buddhist_year}"
     sheet["A4"] = "ลำดับ"
     sheet["B4"] = "ชื่อ-สกุล"
     sheet["C4"] = "ค่าจ้าง"
@@ -97,12 +102,12 @@ def _payroll(path: Path):
         sheet.cell(row, 12, f"=J{row}*K{row}")
         sheet.cell(row, 19, f"=C{row}+F{row}+I{row}+L{row}+M{row}+N{row}+O{row}+P{row}+Q{row}")
         sheet.cell(row, 20, f"=S{row}-R{row}")
-    _payslip_sheets(book)
+    _payslip_sheets(book, year, month)
     book.save(path)
     book.close()
 
 
-def _payslip_sheets(book):
+def _payslip_sheets(book, year: int, month: int):
     for _, full_name in PEOPLE:
         sheet = book.create_sheet(f"Slip {full_name.split()[0]}")
         sheet["A1"] = "PAYSLIP"
@@ -134,12 +139,12 @@ def _payslip_sheets(book):
         sheet["A18"] = "เงินได้สุทธิ"
         sheet["B18"] = 33800
         sheet["A20"] = "period"
-        sheet["B20"] = "September 2026"
+        sheet["B20"] = f"{THAI_MONTHS[month - 1]} {year}"
         sheet["A21"] = "(date)"
-        sheet["B21"] = "2026-09-30"
+        sheet["B21"] = date(year, month, monthrange(year, month)[1]).isoformat()
 
 
-def create_synthetic_excel_fixture(root: Path | None = None):
+def create_synthetic_excel_fixture(root: Path | None = None, *, year=2026, month=9):
     """Build only new synthetic input/output artefacts and return their paths."""
     root = Path(root or uat_root()).resolve()
     expected_parent = (TEST_ROOT / "uat_synthetic").resolve()
@@ -149,8 +154,10 @@ def create_synthetic_excel_fixture(root: Path | None = None):
     attendance_dir, payroll_dir = root / "attendance", root / "payroll_output"
     attendance_dir.mkdir(exist_ok=False)
     payroll_dir.mkdir(exist_ok=False)
-    attendance = attendance_dir / "synthetic_attendance_9.xlsx"
-    payroll = payroll_dir / "synthetic_payroll_9.xlsx"
-    _attendance(attendance)
-    _payroll(payroll)
+    if not isinstance(year, int) or not isinstance(month, int) or not 1 <= month <= 12:
+        raise ValueError("Synthetic fixture needs a valid Gregorian payroll period")
+    attendance = attendance_dir / f"synthetic_attendance_{month}.xlsx"
+    payroll = payroll_dir / f"synthetic_payroll_{month}.xlsx"
+    _attendance(attendance, year, month)
+    _payroll(payroll, year, month)
     return {"root": root, "attendance": attendance, "payroll": payroll, "output": payroll_dir}
