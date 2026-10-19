@@ -24,6 +24,6 @@ def test_phase_e_fixture_uses_only_new_synthetic_files_and_real_readers():
     assert [employee.name for employee in payroll.employees] == [full_name for _, full_name in PEOPLE]
     first = payroll.employees[0]
     assert first.cells["normal_money"].formula == "=D7*E7"
-    assert row_values(first, {})(first.cells["income"].coordinate) == Decimal("34400")
+    assert row_values(first, {})(first.cells["income"].coordinate) == Decimal("34700")
     assert [slip.full_name for slip in slips.slips] == [full_name for _, full_name in PEOPLE]
     assert all(slip.period_cell and slip.payment_date_cell for slip in slips.slips)

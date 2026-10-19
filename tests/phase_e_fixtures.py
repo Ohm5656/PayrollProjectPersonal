@@ -89,7 +89,7 @@ def _payroll(path: Path):
         sheet.cell(row, 1, ordinal)
         sheet.cell(row, 2, full_name)
         values = {3: 30000, 4: 100, 5: 2, 7: 500, 8: 1, 10: 300, 11: 3,
-                  13: 1000, 14: 250, 15: 350, 16: 500, 17: 700, 18: 900}
+                  13: 1000, 14: 300, 15: 600, 16: 500, 17: 700, 18: 900}
         for column, value in values.items():
             sheet.cell(row, column, value)
         sheet.cell(row, 6, f"=D{row}*E{row}")
@@ -115,7 +115,7 @@ def _payslip_sheets(book):
         for row, label, value in (
             (5, "เงินเดือนค่าจ้าง", 30000), (6, "ค่าล่วงเวลา (100 x 2)", 200),
             (7, "ค่าทำงานวันหยุด (500 x 1)", 500), (8, "ค่าล่วงเวลาวันหยุด (300 x 3)", 900),
-            (9, "เบี้ยขยัน", 1000), (10, "ค่าเดินทาง", 250), (11, "เบี้ยเลี้ยง", 350),
+            (9, "เบี้ยขยัน", 1000), (10, "ค่าเดินทาง", 300), (11, "เบี้ยเลี้ยง", 600),
         ):
             sheet.cell(row, 1, label)
             sheet.cell(row, 2, value)
@@ -123,16 +123,16 @@ def _payslip_sheets(book):
         sheet["B12"] = 500
         sheet["A13"] = "ค่าตำแหน่ง"
         sheet["B13"] = 700
-        sheet["A14"] = "รายได้สะสม"
+        sheet["A14"] = "เงินได้สะสม"
         sheet["D5"] = "ที่พัก+ค่าน้ำ+ไฟ"
         sheet["E5"] = 900
         sheet["D12"] = "ภาษีสะสม"
         sheet["A16"] = "รวมเงินได้"
-        sheet["B16"] = 34400
+        sheet["B16"] = 34700
         sheet["A17"] = "รวมเงินหัก"
         sheet["B17"] = 900
         sheet["A18"] = "เงินได้สุทธิ"
-        sheet["B18"] = 33500
+        sheet["B18"] = 33800
         sheet["A20"] = "period"
         sheet["B20"] = "September 2026"
         sheet["A21"] = "(date)"
