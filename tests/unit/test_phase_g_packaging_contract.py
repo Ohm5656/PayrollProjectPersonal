@@ -34,3 +34,4 @@ def test_phase_g6_build_uses_fresh_output_and_verified_staging_only():
     assert 'Refusing to overwrite an existing EXE output directory' in build
     assert '[Parameter(Mandatory=$true)][string]$DistributionPath' in staging
     assert 'prepare_installer_staging.ps1' in installer
+    assert "Programs\\Inno Setup 6\\ISCC.exe" in installer

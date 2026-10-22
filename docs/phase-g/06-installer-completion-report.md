@@ -21,21 +21,29 @@ are never overwritten. This is independent of Git ignore rules.
 | --- | --- |
 | Windows | 11 10.0.26200 |
 | Python / PyInstaller / PySide6 | 3.14.3 / 6.22.3 / 6.12.0 |
-| Candidate EXE | `dist/build-fadcfcd335fa46d69208f5e232a3c7fd/NTP Payroll Assistant - Test Candidate/NTP Payroll Assistant - Test Candidate.exe` |
-| EXE size / SHA-256 | 51,466,927 bytes / `2186A3F37A9A8C5F9A57AFD682B824948DD3DA9C6F3AE35088D3E182992CED40` |
-| Frozen QA smoke | PASS; exited 0 |
+| Candidate EXE | `dist/build-6c5c459ccfac4d498ad85c6c517a46e9/NTP Payroll Assistant - Test Candidate/NTP Payroll Assistant - Test Candidate.exe` |
+| EXE size / SHA-256 | 51,466,805 bytes / `255E2C50FA04F8CD4802034489F80326C46A1AB10C9C5293BA95C8DF9BA69C2B` |
+| Frozen QA smoke | BLOCKED; Windows Application Control policy blocked the unsigned EXE before launch |
 | Candidate persistent state | PASS; `%LOCALAPPDATA%/.../State/test_workspace` |
-| Installer staging | PASS; 228 allowlisted files, manifest `build/installer-manifests/bb88db84e376447db8b45da2c4c11ab7.json` |
+| Installer staging | PASS; 228 allowlisted files, manifest `build/installer-manifests/667da7cfa59b49a0b813d1797906cf79.json` |
 | Prohibited payload data | PASS; no runtime workspace, DB, log, backup, XLS/XLSX or reference path in manifest |
 | Packaged pywin32 | build hooks for `pythoncom`, `pywintypes`, `win32com` included; packaged COM execution remains NOT VERIFIED |
 
 ## Installer result
 
-`ISCC.exe` was not found on PATH or in the standard Inno Setup locations. The
-reproducible `build_installer.ps1` fails closed with an explicit message and
-does not build, download or install software. Therefore there is no installer
-artifact, compiler version, installer hash, install/uninstall execution,
-upgrade rehearsal or packaged COM execution evidence.
+Inno Setup 6.7.3 was found at `%LOCALAPPDATA%/Programs/Inno Setup 6/ISCC.exe`.
+The compiler rebuilt the EXE, staged 228 allowlisted files and successfully
+compiled the unsigned installer below. Compiler output listed only the verified
+staging payload; no payload extractor was present, so binary extraction was
+not an additional validation method.
+
+| Item | Value |
+| --- | --- |
+| Installer | `artifacts/NTP-Payroll-Assistant-Test-Candidate-Setup.exe` |
+| Size | 87,796,196 bytes |
+| SHA-256 | `D7C8C8E87B0D8FCBFE59737026A3AFA4B16D31AD3C6E56787500DF2C1C74A8DB` |
+| Signature | NotSigned |
+| Install/uninstall | NOT VERIFIED; no installer was executed |
 
 The `.iss` definition is per-user, unsigned, QA-labelled, has a Start Menu
 shortcut plus optional Desktop shortcut, and deliberately has no `[Run]`
@@ -43,8 +51,9 @@ action, startup task, monitoring activation or uninstall-delete rule.
 
 ## Remaining gates
 
-Install Inno Setup only with explicit approval, then run
-`packaging/build_installer.ps1` and perform installation/upgrade/uninstall in
-a disposable Windows environment. Native UI/tray/DPI, packaged Excel COM,
-clean-machine compatibility, signing decision and all business-owner payroll
-acceptance remain deferred. Production authorization remains not granted.
+Perform installation/upgrade/uninstall only in an explicitly approved
+disposable Windows environment. Windows Application Control blocked the fresh
+unsigned EXE on this machine, so frozen runtime, native UI/tray/DPI and
+packaged Excel COM remain unverified. Clean-machine compatibility, signing
+decision and all business-owner payroll acceptance remain deferred. Production
+authorization remains not granted.

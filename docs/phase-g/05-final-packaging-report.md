@@ -8,9 +8,9 @@ The reproducible PyInstaller onedir build completed on Windows 11
 | Item | Value |
 | --- | --- |
 | Label | NTP Payroll Assistant - Test Candidate |
-| EXE | `dist/build-fadcfcd335fa46d69208f5e232a3c7fd/NTP Payroll Assistant - Test Candidate/NTP Payroll Assistant - Test Candidate.exe` |
-| Size | 51,466,927 bytes |
-| SHA-256 | `2186A3F37A9A8C5F9A57AFD682B824948DD3DA9C6F3AE35088D3E182992CED40` |
+| EXE | `dist/build-6c5c459ccfac4d498ad85c6c517a46e9/NTP Payroll Assistant - Test Candidate/NTP Payroll Assistant - Test Candidate.exe` |
+| Size | 51,466,805 bytes |
+| SHA-256 | `255E2C50FA04F8CD4802034489F80326C46A1AB10C9C5293BA95C8DF9BA69C2B` |
 | Build source revision | G.6 working tree (documentation follows) |
 | Signature | unsigned |
 | Excel requirement | Microsoft Excel Desktop remains external for COM |
@@ -23,22 +23,24 @@ fallback is available.
 
 ## Installer
 
-The per-user Inno Setup definition is present at
-`packaging/installer/ntp_payroll.iss`. `ISCC.exe` was unavailable, so there
-is **no installer artifact, size, SHA-256, compile result or installation
-evidence**. The script is intentionally lowest-privilege and has no automatic
-launch, monitoring, Windows startup registration or data import.
+The per-user Inno Setup definition compiled with Inno Setup 6.7.3. The unsigned
+installer is `artifacts/NTP-Payroll-Assistant-Test-Candidate-Setup.exe`
+(87,796,196 bytes; SHA-256
+`D7C8C8E87B0D8FCBFE59737026A3AFA4B16D31AD3C6E56787500DF2C1C74A8DB`). It
+has not been installed or uninstalled. The script is intentionally
+lowest-privilege and has no automatic launch, monitoring, Windows startup
+registration or data import.
 
 ## Validation status
 
 | Level | Result |
 | --- | --- |
 | Source focused packaging/safety/UI checks | PASS (11 tests) |
-| Frozen executable QA smoke | PASS (exit code 0) |
+| Frozen executable QA smoke | BLOCKED (Windows Application Control policy) |
 | Qt SVG asset inclusion | PASS |
 | Native Windows UI/tray/keyboard | NOT VERIFIED |
 | Packaged Excel COM | NOT VERIFIED |
-| Installer build/execution/upgrade/uninstall | BLOCKED / NOT VERIFIED |
+| Installer build/execution/upgrade/uninstall | PASS / NOT VERIFIED |
 | Production authorization | NOT GRANTED |
 
 See `04-packaging-qa-report.md` and the Thai acceptance playbook for precise
