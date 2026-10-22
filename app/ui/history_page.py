@@ -3,6 +3,7 @@ from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtWidgets import QComboBox, QHeaderView, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from app.ui.history_model import HistoryViewModel
+from app.ui.theme import apply_surface_background
 
 
 class HistoryPage(QWidget):
@@ -34,6 +35,7 @@ class HistoryPage(QWidget):
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        apply_surface_background(self.table)
         header = self.table.horizontalHeader()
         header.setMinimumSectionSize(96)
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)

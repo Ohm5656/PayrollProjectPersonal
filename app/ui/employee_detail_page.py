@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QTableWidget, QT
 from app.domain import FINAL_STATES, THAI_FIELDS
 from app.ui.components import SectionContainer
 from app.ui.presentation import text
+from app.ui.theme import apply_surface_background
 
 
 def money(value):
@@ -51,6 +52,7 @@ class EmployeeDetailPage(QWidget):
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        apply_surface_background(self.table)
         self.table.cellDoubleClicked.connect(lambda row, _column: self.open_field(row))
         layout.addWidget(self.table, 1)
 

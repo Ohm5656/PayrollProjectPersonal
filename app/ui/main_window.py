@@ -18,6 +18,7 @@ from app.safety import REFERENCE_ROOT, TEST_ROOT, development_target
 from app.ui.review import DecisionDialog, EmployeeReview, PayslipMappingDialog, ReviewCenter, ZeroManualReview, money
 from app.ui.presentation import text,error_text
 from app.ui.components import NavigationButton, PageHeader
+from app.ui.theme import apply_surface_background
 from app.ui.overview_model import OverviewViewModel, overview_action, thai_period
 from app.ui.overview_page import OverviewPage
 from app.ui.review_queue_model import ReviewQueueModel
@@ -246,6 +247,7 @@ class MainWindow(QMainWindow):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.table.setAlternatingRowColors(True)
+        apply_surface_background(self.table)
         self.table.cellDoubleClicked.connect(self.employee_review)
         actions = QHBoxLayout()
         self.read_button = QPushButton('อ่านข้อมูล / คำนวณฉบับร่าง')

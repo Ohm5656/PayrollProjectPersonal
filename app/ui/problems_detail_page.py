@@ -4,6 +4,8 @@ from pathlib import Path
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget
 
+from app.ui.theme import apply_surface_background
+
 
 class ProblemJobDetailPage(QWidget):
     back_requested = Signal()
@@ -61,6 +63,7 @@ class StagedWriteInspectionPage(QWidget):
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(['รหัสรายการ', 'พบไฟล์ปลายทาง', 'สำรองข้อมูลใช้ได้', 'สถานะ'])
         self.table.setEditTriggers(QTableWidget.NoEditTriggers); self.table.setAlternatingRowColors(True)
+        apply_surface_background(self.table)
         layout.addWidget(self.table, 1)
         self.state = QLabel(); self.state.setWordWrap(True); layout.addWidget(self.state)
         back = QPushButton('กลับ'); back.clicked.connect(self.back_requested); layout.addWidget(back)

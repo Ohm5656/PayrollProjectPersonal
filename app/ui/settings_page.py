@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.components import SectionContainer, StatusBadge
+from app.ui.theme import apply_canvas_background
 
 
 class SettingsPage(QScrollArea):
@@ -25,9 +26,11 @@ class SettingsPage(QScrollArea):
         self.setWidgetResizable(True)
         self.viewport().setObjectName('settingsViewport')
         self.viewport().setAttribute(Qt.WA_StyledBackground, True)
+        apply_canvas_background(self.viewport())
         body = QWidget()
         body.setObjectName('settingsBody')
         body.setAttribute(Qt.WA_StyledBackground, True)
+        apply_canvas_background(body)
         self.setWidget(body)
         layout = QVBoxLayout(body)
         layout.setContentsMargins(0, 0, 0, 0)

@@ -1,12 +1,12 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel, QTableWidget
 
 from app.services.payroll_service import PayrollService
 from app.ui.components import SectionContainer, StatusBadge
 from app.ui.main_window import MainWindow
 from app.ui.overview_page import OverviewPage
 from app.ui.settings_page import SettingsPage
-from app.ui.theme import FONT_FAMILIES, stylesheet
+from app.ui.theme import FONT_FAMILIES, TOKENS, apply_surface_background, stylesheet
 from tests.unit.test_ui import qt_app, draft_case
 
 
@@ -14,6 +14,8 @@ def test_shared_theme_keeps_thai_font_fallback_and_table_states():
     css = stylesheet()
     assert FONT_FAMILIES[:3] == ('Segoe UI', 'Leelawadee UI', 'Tahoma')
     assert 'QTableWidget::item:selected' in css
+    assert 'QTableWidget::viewport' in css
+    assert 'image: url("' in css and '%20' not in css
     assert 'QGroupBox' in css
     assert 'QScrollArea#overviewPage' in css
     assert 'QWidget#settingsBody' in css
@@ -30,9 +32,24 @@ def test_overview_and_settings_scroll_surfaces_use_scoped_light_backgrounds(qt_a
         assert page.objectName() == page_name
         assert page.viewport().objectName() == viewport_name
         assert page.viewport().testAttribute(Qt.WA_StyledBackground)
+        assert page.viewport().autoFillBackground()
+        assert page.viewport().palette().color(page.viewport().backgroundRole()).name().upper() == TOKENS['canvas']
         assert page.widget().objectName() == body_name
         assert page.widget().testAttribute(Qt.WA_StyledBackground)
+        # Qt may turn off auto-fill when a stylesheet owns the widget paint
+        # path. The scoped stylesheet and the explicit palette together keep
+        # the native viewport/body canvas deterministic.
+        assert page.widget().palette().color(page.widget().backgroundRole()).name().upper() == TOKENS['canvas']
     overview.close(); settings.close()
+
+
+def test_table_surface_is_opaque_and_light_on_native_palettes(qt_app):
+    table = QTableWidget()
+    apply_surface_background(table)
+    for widget in (table, table.viewport()):
+        assert widget.autoFillBackground()
+        assert widget.palette().color(widget.backgroundRole()).name().upper() == TOKENS['surface']
+    table.close()
 
 
 def test_status_and_long_thai_section_titles_are_accessible(qt_app):

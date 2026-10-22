@@ -2,8 +2,8 @@
 
 | Area | Status | Required evidence |
 | --- | --- | --- |
-| Phase D source UI, period context and lifecycle | PASS (automated) | 330-test Final Acceptance suite at `a762abb`; offscreen source QA smoke |
-| Phase D native pages/tray/focus/DPI | NOT VERIFIED | controlled current native Windows manual QA is still required |
+| Phase D source UI, period context and lifecycle | PASS (automated) | 331-test final suite; isolated native Qt rendering/navigation and synthetic period checks recorded in `03-automated-completion-report.md` |
+| Phase D native pages/tray/focus/DPI | PARTIAL | native Windows Qt harness rendered all five pages at four sizes and controller tests passed; actual notification-area clicks, physical keyboard flow and monitor-DPI review remain manual |
 | Phase D sign-in startup | DEFERRED | explicit authorization; not part of test candidate |
 | Phase E synthetic payroll calculation UAT | PASS (technical) | isolated synthetic fixtures, Decimal assertions and source-level native COM tests |
 | Phase E business salary/OT/leave/bonus/deduction rules | PENDING | payroll-owner approval |
@@ -19,5 +19,6 @@
 | Phase G packaged Excel COM | DEFERRED | isolated fictional workbook and owned Excel process |
 | Phase G clean-machine compatibility | DEFERRED | Windows test machine without project Python |
 | Phase G code signing/security warnings | PENDING | verified signing decision; current candidate is unsigned |
-| Final technical acceptance | PARTIAL | technical evidence is recorded in `01-technical-final-acceptance.md`; manual, business and trusted-deployment gates remain |
+| Automated final acceptance completion | PARTIAL | `03-automated-completion-report.md`: 331 unit tests, source-native Qt checks, synthetic COM/UAT and packaging inspection passed; human/trust gates remain |
+| Final technical acceptance | PARTIAL | technical evidence is recorded in `01-technical-final-acceptance.md` and `03-automated-completion-report.md`; manual, business and trusted-deployment gates remain |
 | Production activation | NOT_VERIFIED | every applicable gate plus explicit business-owner authorization |

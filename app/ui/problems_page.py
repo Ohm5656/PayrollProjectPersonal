@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.services.automation_job_service import AutomationJobState
+from app.ui.theme import apply_surface_background
 
 
 class ProblemsPage(QWidget):
@@ -60,6 +61,7 @@ class ProblemsPage(QWidget):
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        apply_surface_background(self.table)
         header = self.table.horizontalHeader()
         header.setMinimumSectionSize(96)
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)

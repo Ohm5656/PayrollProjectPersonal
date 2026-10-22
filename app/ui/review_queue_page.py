@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.components import SectionContainer
+from app.ui.theme import apply_surface_background
 
 
 class ReviewQueuePage(QWidget):
@@ -58,6 +59,7 @@ class ReviewQueuePage(QWidget):
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
+        apply_surface_background(self.table)
         self.table.itemDoubleClicked.connect(lambda *_: self.activate_current())
         layout.addWidget(self.table, 1)
 

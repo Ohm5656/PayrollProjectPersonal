@@ -11,6 +11,7 @@ from app.domain import MANUAL_FIELDS, RECURRING_FIELDS, THAI_FIELDS, ReusePolicy
 from app.models import DayType
 from app.ui.calendar_review import DAY_LABELS
 from app.ui.presentation import text as presentation_text,issue_text,raw_evidence
+from app.ui.theme import apply_surface_background
 
 
 def money(value):
@@ -256,6 +257,7 @@ class EmployeeReview(QDialog):
         layout.addWidget(QLabel('ค่าจากเดือนก่อนและฉบับร่าง — ดับเบิลคลิกรายการเพื่อยืนยันหรือแก้ไข'))
         self.table = QTableWidget(len(employee.values), 7)
         self.table.setHorizontalHeaderLabels(['รายการ', 'ต้นทาง', 'เดือนก่อน', 'ฉบับร่าง', 'ผู้ใช้แก้ไข', 'จำนวนสุดท้าย', 'เหตุผล'])
+        apply_surface_background(self.table)
         self.fields = list(employee.values)
         for row, field in enumerate(self.fields):
             value = employee.values[field]
@@ -350,6 +352,7 @@ class PayslipMappingDialog(QDialog):
         layout.addWidget(message)
         self.table = QTableWidget(len(self.slip.slots), 5)
         self.table.setHorizontalHeaderLabels(['ชื่อช่องเดิม', 'ยอดเดิม', 'รายการที่ช่องนี้ใช้', 'รายการเพิ่มเติมที่รวมในช่องเดียวกัน', 'จำนวนเมื่อแบ่งหลายช่อง/แก้กรณีพิเศษ'])
+        apply_surface_background(self.table)
         self.controls = []
         for row, slot in enumerate(self.slip.slots):
             self.table.setItem(row, 0, QTableWidgetItem(slot.label))
