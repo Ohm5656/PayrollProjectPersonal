@@ -35,3 +35,18 @@ def test_phase_g6_build_uses_fresh_output_and_verified_staging_only():
     assert '[Parameter(Mandatory=$true)][string]$DistributionPath' in staging
     assert 'prepare_installer_staging.ps1' in installer
     assert "Programs\\Inno Setup 6\\ISCC.exe" in installer
+
+
+def test_signing_readiness_verifier_is_opt_in_and_covers_shipped_native_binaries():
+    root = Path(__file__).resolve().parents[2]
+    verifier = (root / 'packaging' / 'verify_signatures.ps1').read_text(encoding='utf-8')
+    exe = (root / 'packaging' / 'verify_exe.ps1').read_text(encoding='utf-8')
+    installer = (root / 'packaging' / 'verify_installer.ps1').read_text(encoding='utf-8')
+
+    assert 'Get-AuthenticodeSignature' in verifier
+    assert "'.exe', '.dll', '.pyd'" in verifier
+    assert 'TimeStamperCertificate' in verifier
+    assert '[switch]$RequireTrustedSignature' in verifier
+    assert 'Trusted release verification failed' in verifier
+    assert 'verify_signatures.ps1' in exe and 'RequireTrustedSignature' in exe
+    assert 'verify_signatures.ps1' in installer and 'RequireTrustedSignature' in installer
